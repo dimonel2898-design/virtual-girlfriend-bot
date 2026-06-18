@@ -43,8 +43,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         history.append({"role": "assistant", "content": response})
         context.user_data["history"] = history[-8:]
 
-        # Список триггеров для отправки сгенерированных фотографий
-        photo_triggers = ["фото", "фотку", "фотографию", "покажи себя", "как выглядишь", "своё фото", "селфи", "снимок", "купальник", "купальнике"]
+        # Сокращенные корни триггеров, чтобы ловить любые опечатки и падежи (фотку, селфи, выглядешь, выглядиш)
+        photo_triggers = ["фот", "снимок", "селфи", "выгляди", "покажи", "купальник", "купальнике"]
         user_text_lower = user_text.lower()
 
         # Сначала ВСЕГДА отправляем текстовый ответ ИИ, чтобы пользователь видел реакцию в чате
@@ -75,12 +75,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 # Генерируем случайный seed, чтобы новые фотографии всегда отличались ракурсом
                 seed = random.randint(1, 999999)
                 
-                # Форматируем промпт в абсолютно чистую текстовую строку, разделенную дефисами.
-                # Избавляемся от запятых, точек и спецсимволов, которые ломают загрузку картинок в Telegram API.
+                # Формируем промпт в абсолютно чистую текстовую строку, разделенную дефисами.
                 clean_prompt = base_prompt.replace(",", "").replace(".", "").replace("'", "").replace(" ", "-").lower()
                 
-                # Собираем прямую короткую ссылку без параметров запроса (?)
-                photo_url = f"https://pollinations.ai{clean_prompt}-seed-{seed}"
+                # ФИНАЛЬНОЕ ИСПРАВЛЕНИЕ: собираем ссылку строго с расширением .jpg на конце
+                photo_url = f"https://pollinations.ai{clean_prompt}-seed-{seed}.jpg"
                 
                 # Отправляем пользователю настоящее изображение
                 await update.message.reply_photo(
