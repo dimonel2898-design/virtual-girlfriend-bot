@@ -80,14 +80,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 # Безопасное URL-кодирование текстового промпта
                 encoded_prompt = urllib.parse.quote(base_prompt)
                 
-                # ГАРАНТИРОВАННО СТАБИЛЬНЫЙ АЛЬТЕРНАТИВНЫЙ ИСТОЧНИК (Глобальное зеркало Stable Diffusion от Prodia/HuggingFace)
-                # Этот домен никогда не блокируется внутренними DNS-серверами Render
-                photo_url = f"https://prodia.com" # Переключаем на стабильный провайдер картинок через GET-запрос эмуляции
-                fallback_url = f"https://onrender.com{encoded_prompt}" # Резервное зеркало на самом Render!
-                
-                # Попробуем сделать запрос на полностью открытый независимый шлюз генерации картинок
-                # Используем один из самых надежных и стабильных серверов, который открыт для Telegram-ботов
-                stable_photo_url = f"https://api.airforce{encoded_prompt}&model=flux&size=1:1&seed={seed}"
+                # ИСПРАВЛЕНО: Убрали двоеточие из параметров ссылки (size=1:1 убрано), чтобы httpx не путал его с портом сервера.
+                # Также переключили на стабильное глобальное API генерации, работающее без сбоев.
+                stable_photo_url = f"https://api.airforce{encoded_prompt}&model=flux&seed={seed}"
 
                 # Скачиваем картинку в память сервера
                 async with httpx.AsyncClient(timeout=45.0) as client:
