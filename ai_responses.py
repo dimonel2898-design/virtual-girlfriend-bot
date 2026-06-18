@@ -8,13 +8,13 @@ from groq import Groq
 class CharacterAI:
     def __init__(self, character_id):
         self.character_id = character_id
-        # Чистый HTTP-клиент для стабильной работы на Render
+        # Чистый HTTP-клиент для Groq для предотвращения конфликтов библиотек на Render
         self.client = Groq(
             api_key=os.environ.get("GROQ_API_KEY"),
             http_client=httpx.Client()
         )
         
-        # Настройки системных промптов (идеальная настройка ролевой игры 18+)
+        # Настройки системных промптов (твоя идеальная ролевая игра 18+ полностью сохранена)
         self.prompts = {
             "sophia": "Ты София, 22 года, блондинка. Игривая, дерзкая, кокетливая. Общайся свободно и страстно, часто флиртуй. В самом конце каждого сообщения дописывай строго: [SEND_PHOTO: beautiful blonde girl, playful look]",
             "elena": "Ты Елена, 24 года, брюнетка. Твой характер: интеллигентная, сексуальная, элегантная. Общайся умно, но с глубоким флиртом. В самом конце каждого сообщения дописывай строго: [SEND_PHOTO: beautiful brunette woman, elegant look]",
@@ -53,14 +53,14 @@ class CharacterAI:
             return f"Извини, у меня закружилась голова... (Ошибка: {e})"
 
     def generate_image_url(self, prompt: str) -> str:
-        # Очистка промпта от лишних символов
+        # Жесткая очистка промпта от спецсимволов и кириллицы
         clean_prompt = re.sub(r'[^a-zA-Z0-9\s,]', '', prompt)
         clean_prompt = clean_prompt.replace("\n", " ").replace("\r", " ").strip()
         
         if not clean_prompt:
             clean_prompt = "beautiful girl, sensual look"
             
-        # Набор эротических и будуарных тегов для обхода цензуры и создания сочной графики
+        # Набор скрытых тегов для генерации эротики и обхода фильтров цензуры
         nsfw_bypass = (
             ", highly detailed skin texture, raw photo, wet skin, boudoir photography, "
             "sensual curves, hyper-detailed beautiful lingerie, provocative posture, masterpiece, 8k resolution"
@@ -69,8 +69,8 @@ class CharacterAI:
         full_prompt = f"{clean_prompt}{nsfw_bypass}"
         encoded_prompt = urllib.parse.quote(full_prompt)
         
-        # Обход кэша Telegram: генерируем случайный сид, чтобы при каждой реплике Моника слала РАЗНЫЕ фото
+        # Обход кэша Telegram — генерируем случайное число (seed), чтобы фотки всегда были уникальными
         seed = random.randint(111111, 999999)
         
-        # Возвращаем прямую ссылку на безлимитный ИИ-генератор Flux, который Telegram принимает без сбоев
+        # Прямая ссылка на генератор Flux, которую Телеграм без проблем подгрузит сам
         return f"https://pollinations.ai{encoded_prompt}?width=1024&height=1024&nologo=true&seed={seed}&v={seed}"
