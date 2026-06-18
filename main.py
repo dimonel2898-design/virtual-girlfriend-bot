@@ -44,7 +44,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         history.append({"role": "assistant", "content": response})
         context.user_data["history"] = history[-8:]
 
-        # Сокращенные корни триггеров для фото
+        # Сокращенные корни триггеров для фото (поймет любые опечатки)
         photo_triggers = ["фот", "снимок", "селфи", "выгляди", "покажи", "купальник", "купальнике"]
         user_text_lower = user_text.lower()
 
@@ -72,17 +72,19 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 seed = random.randint(1, 999999)
                 
-                # Кодируем промпт так, чтобы убрать пробелы и запятые, мешающие ссылкам
+                # Кодируем промпт так, чтобы убрать спецсимволы, ломающие URL
                 clean_prompt = base_prompt.replace(",", "").replace(".", "").replace("'", "").replace(" ", "-").lower()
                 
-                # Используем стабильный статический домен-генератор, который Telegram считывает сам.
-                # Render здесь вообще не делает сетевых запросов наружу, поэтому упасть из-за DNS он не сможет!
+                # Ссылка на генератор, которую Telegram подгрузит сам прямо в чате
                 photo_url = f"https://pollinations.ai{clean_prompt}-seed-{seed}.jpg"
                 
-                # Отправляем сообщение со специальной разметкой, чтобы Telegram сам подгрузил изображение
+                # Собираем скрытую HTML ссылку внутри пустого символа в начале текста.
+                # Telegram считает разметку и выведет картинку красивым превью под текстом сообщения.
+                html_text = f'<a href="{photo_url}">\u200b</a>📷 Отправляю тебе своё фото! Лови 😉'
+                
                 await update.message.reply_text(
-                    text=f"[📸]({photo_url}) Отправляю тебе своё фото\! Нажми на текст, если оно не загрузилось 😉",
-                    parse_mode="MarkdownV2"
+                    text=html_text,
+                    parse_mode="HTML"
                 )
                         
             except Exception as img_err:
