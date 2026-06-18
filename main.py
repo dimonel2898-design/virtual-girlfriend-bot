@@ -1,6 +1,7 @@
 import os
 import logging
 import random
+import httpx
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from telegram import Update
@@ -75,17 +76,25 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 # Генерируем случайный seed, чтобы новые фотографии всегда отличались ракурсом
                 seed = random.randint(1, 999999)
                 
-                # Формируем промпт в абсолютно чистую текстовую строку, разделенную дефисами.
+                # Формируем промпт в чистую текстовую строку, разделенную дефисами
                 clean_prompt = base_prompt.replace(",", "").replace(".", "").replace("'", "").replace(" ", "-").lower()
-                
-                # ФИНАЛЬНОЕ ИСПРАВЛЕНИЕ: собираем ссылку строго с расширением .jpg на конце
                 photo_url = f"https://pollinations.ai{clean_prompt}-seed-{seed}.jpg"
                 
-                # Отправляем пользователю настоящее изображение
-                await update.message.reply_photo(
-                    photo=photo_url,
-                    caption="📸 Лови моё фото! Как тебе? 😉"
-                )
+                # СКАЧИВАНИЕ КАРТИНКИ В ПАМЯТЬ: Бот сам дождется генерации и скачает файл
+                async with httpx.AsyncClient(timeout=45.0) as client:
+                    img_response = await client.get(photo_url)
+                    
+                    if img_response.status_code == 200:
+                        photo_bytes = img_response.content
+                        
+                        # Отправляем скачанные байты как готовое фото (ошибки URL теперь исключены)
+                        await update.message.reply_photo(
+                            photo=photo_bytes,
+                            caption="📸 Лови моё фото! Как тебе? 😉"
+                        )
+                    else:
+                        raise RuntimeError(f"Pollinations AI вернул статус-код: {img_response.status_code}")
+                        
             except Exception as img_err:
                 logger.error(f"Ошибка генерации или отправки картинки: {img_err}")
                 await update.message.reply_text("💔 Ой, камера на телефоне что-то забарахлила... Попробуй ещё раз попросить?")
