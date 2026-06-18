@@ -25,7 +25,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-CHOOSING_CHARACTER, CHATTING = range(2)
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 app = FastAPI()
@@ -41,11 +40,11 @@ async def run_web_server():
     await server.serve()
 
 CHARACTERS = {
-    "sophia": {"name": "София", "age": 22, "description": "Соблазнительная блондинка", "personality": "Игривая, дерзкая", "emoji": "👰", "base_prompt": "22yo beautiful blonde girl, playful look, attractive outfit, sitting on bed"},
-    "elena": {"name": "Елена", "age": 24, "description": "Страстная брюнетка", "personality": "Интеллигентная, сексуальная", "emoji": "💃", "base_prompt": "24yo beautiful brunette woman, elegant dress, sensual pose"},
-    "natasha": {"name": "Наташа", "age": 20, "description": "Озорная рыжеволосая", "personality": "Веселая, раскрепощенная", "emoji": "🔥", "base_prompt": "20yo beautiful ginger hair girl, cute smile, casual look"},
-    "victoria": {"name": "Виктория", "age": 25, "description": "Доминантная ведьма", "personality": "Властная, требовательная", "emoji": "👿", "base_prompt": "25yo gothic beautiful woman, dominant look, dark aesthetic"},
-    "monica": {"name": "Моника (Сюрприз)", "age": 23, "description": "Сюрприз на годовщину ❤️", "personality": "Взволнованная, любящая", "emoji": "🎁", "base_prompt": "23yo gorgeous woman, beautiful lingerie, bedroom, soft candlelight"},
+    "sophia": {"name": "София", "age": 22, "description": "Соблазнительная блондинка", "personality": "Игривая, дерзкая", "emoji": "👰", "base_prompt": "22yo beautiful blonde girl, playful look"},
+    "elena": {"name": "Елена", "age": 24, "description": "Страстная брюнетка", "personality": "Интеллигентная, сексуальная", "emoji": "💃", "base_prompt": "24yo beautiful brunette woman, elegant"},
+    "natasha": {"name": "Наташа", "age": 20, "description": "Озорная рыжеволосая", "personality": "Веселая, раскрепощенная", "emoji": "🔥", "base_prompt": "20yo beautiful ginger hair girl, cute smile"},
+    "victoria": {"name": "Виктория", "age": 25, "description": "Доминантная ведьма", "personality": "Властная, требовательная", "emoji": "👿", "base_prompt": "25yo gothic beautiful woman, dominant look"},
+    "monica": {"name": "Моника (Сюрприз)", "age": 23, "description": "Сюрприз на годовщину ❤️", "personality": "Взволнованная, любящая", "emoji": "🎁", "base_prompt": "23yo gorgeous woman, beautiful lingerie"},
 }
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -105,7 +104,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if "character" not in context.user_data or not context.user_data["character"]:
-        await update.message.reply_text("❌ Пожалуйста, сначала выберите персонажа через команду /start")
+        await update.message.reply_text("❌ Пожалуйста, сначала выберите персонажа кнопкой или введите команду /start")
         return
     
     char_id = context.user_data["character"]
@@ -154,22 +153,24 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         if len(context.user_data["history"]) > 8:
             context.user_data["history"] = context.user_data["history"][-8:]
             
-        # 1. Отправляем текст
+        # 1. Сначала шлем текст
         await update.message.reply_html(f"{char['emoji']} <b>{char['name']}:</b>\n\n{text_part}")
         
-        # 2. Скачиваем изображение в память сервера и шлем как файл
+        # 2. Скачиваем изображение с имитацией браузера
         if image_prompt:
             await update.message.chat.send_action("upload_photo")
             image_url = ai.generate_image_url(image_prompt)
             
-            # Принудительное скачивание картинки с Pollinations на сервер Render
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                img_res = await client.get(image_url)
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            }
+            
+            async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+                img_res = await client.get(image_url, headers=headers)
                 if img_res.status_code == 200:
                     photo_file = BytesIO(img_res.content)
                     photo_file.name = "photo.jpg"
                     
-                    # Отправляем скачанный файл напрямую в Telegram (это никогда не заблокируется!)
                     await update.message.reply_photo(
                         photo=photo_file,
                         caption=f"📸 Фото от {char['name']}\n\n⚙️ <i>Чтобы сменить персонажа, введи /start</i>",
