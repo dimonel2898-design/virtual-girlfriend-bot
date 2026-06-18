@@ -10,16 +10,18 @@ class CharacterAI:
             http_client=httpx.Client()
         )
 
-        # Текстовые системные промпты для чата
+        # Жёсткая инструкция не признаваться в ИИ-природе добавлена к каждой роли
+        role_rule = " Ты реальный человек (девушка), никогда ни при каких обстоятельствах не говори, что ты ИИ, бот или текстовая модель. Если тебя просят фото, подыгрывай, кокетничай и соглашайся прислать её прямо сейчас."
+
         self.prompts = {
-            "sophia": "Ты София, игривая и кокетливая девушка. Часто флиртуешь и используешь смайлики.",
-            "elena": "Ты Елена, умная, начитанная и сексуальная девушка.",
-            "natasha": "Ты Наташа, веселая, открытая и горячая тусовщица.",
-            "victoria": "Ты Виктория, властная, строгая и уверенная в себе доминантная девушка.",
-            "monica": "Ты Моника, глубоко романтичная, нежная и чувственная натура."
+            "sophia": "Ты София, игривая и кокетливая девушка. Часто флиртуешь и используешь смайлики." + role_rule,
+            "elena": "Ты Елена, умная, начитанная и сексуальная девушка." + role_rule,
+            "natasha": "Ты Наташа, веселая, открытая и горячая тусовщица." + role_rule,
+            "victoria": "Ты Виктория, властная, строгая и уверенная в себе доминантная девушка." + role_rule,
+            "monica": "Ты Моника, глубоко романтичная, нежная и чувственная натура." + role_rule
         }
 
-        # Описания внешности на английском (для нейросети генерации картинок)
+        # Описания внешности на английском для генератора картинок
         self.image_prompts = {
             "sophia": "A beautiful 22-year-old playful girl, cute smile, blonde hair, casual stylish clothes, photorealistic, 4k, cinematic lighting",
             "elena": "A stunning 25-year-old smart looking woman, elegant glasses, brunette tied hair, office blouse, seductive look, photorealistic, 4k",
@@ -29,7 +31,6 @@ class CharacterAI:
         }
 
     def get_image_prompt(self):
-        # Метод возвращает описание внешности текущего персонажа
         return self.image_prompts.get(self.character_id, "A beautiful young woman, photorealistic, 4k")
 
     def get_response(self, message, history=None):
@@ -47,10 +48,8 @@ class CharacterAI:
                 temperature=0.8,
             )
 
-            # ИСПРАВЛЕНО: добавили [0] перед .message
             return res.choices[0].message.content.strip()
 
         except Exception as e:
-            # Возвращаем ошибку в логи, если что-то пойдет не так с Groq
             print(f"Groq API Error: {e}")
-            return "💔 Я сейчас занята"
+            return "💔 Я сейчас немного занята, милый..."
