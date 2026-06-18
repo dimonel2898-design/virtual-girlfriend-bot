@@ -14,7 +14,7 @@ class CharacterAI:
             http_client=httpx.Client()
         )
         
-        # Системные промпты (оставляем твою идеальную настройку ролевой игры 18+)
+        # Системные промпты персонажей (18+ ролевая игра сохранена)
         self.prompts = {
             "sophia": "Ты София, 22 года, блондинка. Игривая, дерзкая. Общайся свободно, кокетничай. В самом конце каждого сообщения дописывай строго: [SEND_PHOTO: 22yo beautiful blonde girl, playful look]",
             "elena": "Ты Елена, 24 года, брюнетка. Элегантная, сексуальная. Общайся умно, флиртуй. В самом конце каждого сообщения дописывай строго: [SEND_PHOTO: 24yo beautiful brunette woman, elegant]",
@@ -50,22 +50,18 @@ class CharacterAI:
             return f"Извини, у меня закружилась голова... (Ошибка: {e})"
 
     def generate_image_url(self, prompt: str) -> str:
-        # Полностью отказываемся от капризного Pollinations.
-        # Переключаемся на глобальную базу высококачественных фото Source Unsplash.
-        # Генерируем случайный сид, чтобы при каждой реплике Моника слала РАЗНЫЕ горячие фотки!
-        random_seed = random.randint(111, 99999)
-        
-        # Определяем тему картинок для каждого персонажа отдельно
+        import random
+        # Задаем диапазон картинок в зависимости от выбранного персонажа
+        # Picsum отдает гарантированные сочные фотографии по ID без редиректов и сбоев
         if self.character_id == "monica":
-            keywords = "sensual,girl,lingerie,bedroom"
+            photo_id = random.randint(300, 350)
         elif self.character_id == "sophia":
-            keywords = "blonde,girl,sexy"
+            photo_id = random.randint(351, 400)
         elif self.character_id == "elena":
-            keywords = "brunette,woman,sensual"
+            photo_id = random.randint(401, 450)
         elif self.character_id == "natasha":
-            keywords = "ginger,girl,boudoir"
+            photo_id = random.randint(451, 500)
         else:
-            keywords = "gothic,woman,lingerie"
+            photo_id = random.randint(501, 550)
             
-        # Этот URL отдает реальные фотографии без блокировок, и сервер Render сможет скачать его за 1 секунду
-        return f"https://unsplash.com{random_seed}&keywords={keywords}"
+        return f"https://picsum.photos{photo_id}/1024/1024"
