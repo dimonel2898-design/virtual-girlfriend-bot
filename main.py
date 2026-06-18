@@ -151,10 +151,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         if len(context.user_data["history"]) > 8:
             context.user_data["history"] = context.user_data["history"][-8:]
             
-        # 1. Сначала отсылаем текст
+        # 1. Отправляем текст
         await update.message.reply_html(f"{char['emoji']} <b>{char['name']}:</b>\n\n{text_part}")
         
-        # 2. Передаем чистую строку URL прямо в Telegram (без локального скачивания)
+        # 2. Мгновенно передаем прямую текстовую ссылку в API Telegram
         if image_prompt:
             await update.message.chat.send_action("upload_photo")
             image_url = ai.generate_image_url(image_prompt)
