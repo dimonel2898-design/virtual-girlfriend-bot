@@ -47,8 +47,10 @@ class CharacterAI:
                 temperature=0.8,
             )
 
+            # ИСПРАВЛЕНО: добавили [0] перед .message
             return res.choices[0].message.content.strip()
 
-        except Exception:
+        except Exception as e:
+            # Возвращаем ошибку в логи, если что-то пойдет не так с Groq
+            print(f"Groq API Error: {e}")
             return "💔 Я сейчас занята"
-
