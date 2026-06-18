@@ -1,8 +1,9 @@
 import asyncio
 import logging
 import os
-import re
 import uvicorn
+import httpx
+from io import BytesIO
 from fastapi import FastAPI
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -24,6 +25,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+CHOOSING_CHARACTER, CHATTING = range(2)
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 app = FastAPI()
@@ -49,13 +51,7 @@ CHARACTERS = {
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     context.user_data["history"] = []
     context.user_data["character"] = None
-    
-    disclaimer = (
-        "⚠️ <b>ВНИМАНИЕ: КОНТЕНТ 18+</b>\n\n"
-        "Вам есть 18 лет?\n\n"
-        "🤖 Бот использует Groq AI (LLaMA 3.3)\n"
-        "⚡ Бесплатный • Без ограничений • Без цензуры"
-    )
+    disclaimer = "⚠️ <b>ВНИМАНИЕ: КОНТЕНТ 18+</b>\n\nВам есть 18 лет?"
     keyboard = [[InlineKeyboardButton("✅ Согласен", callback_data="proceed"), InlineKeyboardButton("❌ Нет", callback_data="exit")]]
     
     if update.message:
@@ -85,8 +81,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     if data.startswith("char_"):
         char_id = data.replace("char_", "")
-        if char_id not in CHARACTERS:
-            return
+        if char_id not in CHARACTERS: return
         
         context.user_data["character"] = char_id
         context.user_data["history"] = []
@@ -105,14 +100,12 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             profile_text = f"{char['emoji']} <b>{char['name']}</b>\n\n🎂 Возраст: {char['age']}\n💬 Начните писать ей прямо в чат..."
             
         await query.message.reply_html(profile_text)
-        try:
-            await query.message.delete()
-        except Exception:
-            pass
+        try: await query.message.delete()
+        except Exception: pass
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if "character" not in context.user_data or not context.user_data["character"]:
-        await update.message.reply_text("❌ Пожалуйста, сначала выберите персонажа кнопкой или введите команду /start")
+        await update.message.reply_text("❌ Пожалуйста, сначала выберите персонажа через команду /start")
         return
     
     char_id = context.user_data["character"]
@@ -148,8 +141,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                     break
         
         text_part = text_part.strip()
-        if not text_part:
-            text_part = response
+        if not text_part: text_part = response
             
         trigger_words = ["фото", "покажи", "раздеться", "белье", "тело", "одежд", "смотри", "взгляни", "грудь", "сексуаль", "интим"]
         is_photo_requested = any(w in user_message.lower() for w in trigger_words) or any(w in response.lower() for w in trigger_words)
@@ -162,16 +154,29 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         if len(context.user_data["history"]) > 8:
             context.user_data["history"] = context.user_data["history"][-8:]
             
+        # 1. Отправляем текст
         await update.message.reply_html(f"{char['emoji']} <b>{char['name']}:</b>\n\n{text_part}")
         
+        # 2. Скачиваем изображение в память сервера и шлем как файл
         if image_prompt:
             await update.message.chat.send_action("upload_photo")
             image_url = ai.generate_image_url(image_prompt)
-            await update.message.reply_photo(
-                photo=image_url,
-                caption=f"📸 Фото от {char['name']}\n\n⚙️ <i>Чтобы сменить персонажа, введи /start</i>",
-                parse_mode="HTML"
-            )
+            
+            # Принудительное скачивание картинки с Pollinations на сервер Render
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                img_res = await client.get(image_url)
+                if img_res.status_code == 200:
+                    photo_file = BytesIO(img_res.content)
+                    photo_file.name = "photo.jpg"
+                    
+                    # Отправляем скачанный файл напрямую в Telegram (это никогда не заблокируется!)
+                    await update.message.reply_photo(
+                        photo=photo_file,
+                        caption=f"📸 Фото от {char['name']}\n\n⚙️ <i>Чтобы сменить персонажа, введи /start</i>",
+                        parse_mode="HTML"
+                    )
+                else:
+                    raise Exception(f"Failed to download image: {img_res.status_code}")
             
     except Exception as e:
         logger.error(f"Error in handle_message: {e}")
@@ -179,7 +184,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 async def main_async() -> None:
     application = Application.builder().token(BOT_TOKEN).build()
-    
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(button_handler))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
@@ -187,12 +191,10 @@ async def main_async() -> None:
     await application.initialize()
     await application.start()
     await application.updater.start_polling()
-    print("🤖 Бот успешно запущен без багов ConversationHandler!")
+    print("🤖 Бот успешно запущен!")
     
     asyncio.create_task(run_web_server())
-    
-    while True:
-        await asyncio.sleep(3600)
+    while True: await asyncio.sleep(3600)
 
 if __name__ == '__main__':
     asyncio.run(main_async())
