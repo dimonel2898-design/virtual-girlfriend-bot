@@ -121,7 +121,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         image_prompt = None
         text_part = response
         
-        # Четкое и стабильное вырезание тега картинки
+        # Индексный срез тегов
         start_idx = response.find("[SEND_PHOTO:")
         if start_idx != -1:
             text_part = response[:start_idx].strip()
@@ -152,7 +152,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         if len(context.user_data["history"]) > 8:
             context.user_data["history"] = context.user_data["history"][-8:]
             
-        # 1. Отправляем текстовое сообщение
+        # 1. Сначала отсылаем текст
         await update.message.reply_html(f"{char['emoji']} <b>{char['name']}:</b>\n\n{text_part}")
         
         # 2. Передаем чистую строку URL прямо в Telegram (без локального скачивания)
