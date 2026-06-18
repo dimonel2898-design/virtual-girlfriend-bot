@@ -1,6 +1,3 @@
-Virtual Girlfriend Bot - Main Application with Groq AI + Web Server for Render
-Updated: 2026-06-18
-"""
 import asyncio
 import logging
 import os
@@ -30,9 +27,10 @@ logger = logging.getLogger(__name__)
 
 CHOOSING_CHARACTER, CHATTING = range(2)
 
-# Пытаемся взять токен из переменных окружения Render, если его там нет — берем заглушку
+# Берем токен строго из переменных окружения Render
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-# ----------------- НАСТРОЙКА ВЕБ-СЕРВЕРА ДЛЯ RENDER -----------------
+
+# Настройка веб-сервера для Render
 app = FastAPI()
 
 @app.get("/")
@@ -40,13 +38,12 @@ async def root():
     return {"status": "alive", "message": "Virtual Girlfriend Bot is running!"}
 
 async def run_web_server():
-    # Render передает порт в переменную окружения PORT
     port = int(os.environ.get("PORT", 8000))
     config = uvicorn.Config(app, host="0.0.0.0", port=port, log_level="info")
     server = uvicorn.Server(config)
     await server.serve()
-# --------------------------------------------------------------------
 
+# Список персонажей бота
 CHARACTERS = {
     "sophia": {
         "name": "София",
@@ -76,12 +73,19 @@ CHARACTERS = {
         "personality": "Властная, требовательная",
         "emoji": "👿",
     },
+    "monica": {
+        "name": "Моника (Сюрприз)",
+        "age": 23,
+        "description": "Сюрприз на годовщину ❤️",
+        "personality": "Взволнованная, любящая, романтичная",
+        "emoji": "🎁",
+    },
 }
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     disclaimer = (
         "⚠️ <b>ВНИМАНИЕ: КОНТЕНТ 18+</b>\n\n"
-        "Вам 18 лет?\n\n"
+        "Вам есть 18 лет?\n\n"
         "🤖 Бот использует Groq AI (LLaMA 3.3)\n"
         "⚡ Бесплатный • Без ограничений • Без цензуры"
     )
@@ -124,11 +128,23 @@ async def character_selected(update: Update, context: ContextTypes.DEFAULT_TYPE)
     
     context.user_data["character"] = char_id
     char = CHARACTERS[char_id]
-    profile_text = (
-        f"{char['emoji']} <b>{char['name']}</b>\n\n"
-        f"🎂 Возраст: {char['age']}\n"
-        f"💬 Начните писать..."
-    )
+    
+    if char_id == "monica":
+        profile_text = (
+            f"🎁 <b>{char['name']}</b>\n\n"
+            f"Вы приходите домой — вокруг горят свечи, на столе стоит Ваше любимое блюдо, "
+            f"а на двери в спальню висит записка: <i>«закройте глаза»</i>.\n\n"
+            f"Голос Моники доносится из глубины комнаты. Она звучит взволнованно и чуть нервно:\n"
+            f"«О боже, я так нервничаю! Но ты выглядишь потрясающе, правда. Я подготовила небольшой сюрприз для нашей годовщины...»\n\n"
+            f"💬 <b>Ответьте Монике, чтобы начать сценарий...</b>"
+        )
+    else:
+        profile_text = (
+            f"{char['emoji']} <b>{char['name']}</b>\n\n"
+            f"🎂 Возраст: {char['age']}\n"
+            f"💬 Начните писать..."
+        )
+        
     keyboard = [[InlineKeyboardButton("🔄 Другая", callback_data="back")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(profile_text, reply_markup=reply_markup, parse_mode="HTML")
@@ -163,24 +179,45 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     try:
         ai = CharacterAI(char_id)
         response = ai.get_response(user_message)
-        full_response = f"{char['emoji']} <b>{char['name']}:</b>\n\n{response}"
-        keyboard = [[InlineKeyboardButton("🔄 Другая", callback_data="back")]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_html(full_response, reply_markup=reply_markup)
+        
+        if "[SEND_PHOTO:" in response:
+            text_part, photo_part = response.split("[SEND_PHOTO:", 1)
+            image_prompt = photo_part.replace("]", "").strip()
+            text_part = text_part.strip()
+            
+            if text_part:
+                full_response = f"{char['emoji']} <b>{char['name']}:</b>\n\n{text_part}"
+                await update.message.reply_html(full_response)
+                
+            await update.message.chat.send_action("upload_photo")
+            image_url = ai.generate_image_url(image_prompt)
+            
+            keyboard = [[InlineKeyboardButton("🔄 Другая", callback_data="back")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await update.message.reply_photo(
+                photo=image_url,
+                caption=f"📸 Фото от {char['name']}",
+                reply_markup=reply_markup
+            )
+        else:
+            full_response = f"{char['emoji']} <b>{char['name']}:</b>\n\n{response}"
+            keyboard = [[InlineKeyboardButton("🔄 Другая", callback_data="back")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await update.message.reply_html(full_response, reply_markup=reply_markup)
+            
     except Exception as e:
-        logger.error(f"Error: {e}")
-        await update.message.reply_text("❌ Ошибка. Попробуйте позже.")
+        logger.error(f"Error in conversation: {e}")
+        await update.message.reply_text("❌ Ошибка ИИ. Попробуйте позже.")
     
     return CHATTING
 
 async def run_bot(application: Application):
-    # Асинхронная инициализация и запуск опроса Telegram
     await application.initialize()
     await application.start()
     await application.updater.start_polling()
     print("🤖 Бот успешно запущен в режиме polling!")
     
-    # Держим бота запущенным, пока работает программа
     try:
         while True:
             await asyncio.sleep(3600)
@@ -211,7 +248,6 @@ async def main_async() -> None:
     
     application.add_handler(conv_handler)
     
-    # Запускаем одновременно веб-сервер и самого бота
     await asyncio.gather(
         run_web_server(),
         run_bot(application)
@@ -221,4 +257,4 @@ if __name__ == '__main__':
     try:
         asyncio.run(main_async())
     except (KeyboardInterrupt, SystemExit):
-        logger.info("Бот остановлен.")"
+        logger.info("Бот остановлен.")
