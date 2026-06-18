@@ -1,188 +1,76 @@
-import asyncio
-import logging
 import os
-import uvicorn
-from fastapi import FastAPI
-from dotenv import load_dotenv
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import (
-    Application,
-    CommandHandler,
-    MessageHandler,
-    CallbackQueryHandler,
-    ContextTypes,
-    filters,
-)
-from ai_responses import CharacterAI
+import re
+import random
+import urllib.parse
+import httpx
+from groq import Groq
 
-load_dotenv()
-
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
-logger = logging.getLogger(__name__)
-
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-
-app = FastAPI()
-
-@app.get("/")
-async def root():
-    return {"status": "alive", "message": "Virtual Girlfriend Bot is running!"}
-
-async def run_web_server():
-    port = int(os.environ.get("PORT", 8000))
-    config = uvicorn.Config(app, host="0.0.0.0", port=port, log_level="info")
-    server = uvicorn.Server(config)
-    await server.serve()
-
-CHARACTERS = {
-    "sophia": {"name": "София", "age": 22, "description": "Соблазнительная блондинка", "personality": "Игривая, дерзкая", "emoji": "👰", "base_prompt": "beautiful blonde girl"},
-    "elena": {"name": "Елена", "age": 24, "description": "Страстная брюнетка", "personality": "Интеллигентная, сексуальная", "emoji": "💃", "base_prompt": "beautiful brunette woman"},
-    "natasha": {"name": "Наташа", "age": 20, "description": "Озорная рыжеволосая", "personality": "Веселая, раскрепощенная", "emoji": "🔥", "base_prompt": "beautiful ginger girl"},
-    "victoria": {"name": "Виктория", "age": 25, "description": "Доминантная ведьма", "personality": "Властная, требовательная", "emoji": "👿", "base_prompt": "gothic beautiful woman"},
-    "monica": {"name": "Моника (Сюрприз)", "age": 23, "description": "Сюрприз на годовщину ❤️", "personality": "Взволнованная, любящая", "emoji": "🎁", "base_prompt": "gorgeous girl"},
-}
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    context.user_data["history"] = []
-    context.user_data["character"] = None
-    disclaimer = "⚠️ <b>ВНИМАНИЕ: КОНТЕНТ 18+</b>\n\nВам есть 18 лет?"
-    keyboard = [[InlineKeyboardButton("✅ Согласен", callback_data="proceed"), InlineKeyboardButton("❌ Нет", callback_data="exit")]]
-    
-    if update.message:
-        await update.message.reply_html(disclaimer, reply_markup=InlineKeyboardMarkup(keyboard))
-    elif update.callback_query:
-        await update.callback_query.message.reply_html(disclaimer, reply_markup=InlineKeyboardMarkup(keyboard))
-
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
-    await query.answer()
-    data = query.data
-
-    if data == "exit":
-        await query.edit_message_text("До свидания! 👋")
-        return
-
-    if data == "proceed" or data == "back":
-        context.user_data["character"] = None
-        context.user_data["history"] = []
-        text = "👥 <b>Выберите девушку для общения:</b>\n\n"
-        keyboard = []
-        for char_id, char_data in CHARACTERS.items():
-            text += f"{char_data['emoji']} <b>{char_data['name']}</b> ({char_data['age']})\n"
-            keyboard.append([InlineKeyboardButton(f"{char_data['emoji']} {char_data['name']}", callback_data=f"char_{char_id}")])
-        await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
-        return
-
-    if data.startswith("char_"):
-        char_id = data.replace("char_", "")
-        if char_id not in CHARACTERS: return
+class CharacterAI:
+    def __init__(self, character_id):
+        self.character_id = character_id
+        # Чистый HTTP-клиент для Groq для стабильной работы на серверах Render
+        self.client = Groq(
+            api_key=os.environ.get("GROQ_API_KEY"),
+            http_client=httpx.Client()
+        )
         
-        context.user_data["character"] = char_id
-        context.user_data["history"] = []
-        char = CHARACTERS[char_id]
-        
-        if char_id == "monica":
-            profile_text = (
-                f"🎁 <b>{char['name']}</b>\n\n"
-                f"Вы приходите домой — вокруг горят свечи, на столе стоит Ваше любимое блюдо, "
-                f"а на двери в спальню висит записка: <i>«закройте глаза»</i>.\n\n"
-                f"Голос Моники доносится из глубины комнаты. Она звучит взволнованно и чуть нервно:\n"
-                f"«О боже, я так нервничаю! Но ты выглядишь потрясающе, правда. Я подготовила небольшой сюрприз для нашей годовщины...»\n\n"
-                f"💬 <b>Ответьте Монике прямо в чат, чтобы начать сценарий...</b>"
+        # Настройки системных промптов (твоя идеальная ролевая игра 18+ сохранена)
+        self.prompts = {
+            "sophia": "Ты София, 22 года, блондинка. Игривая, дерзкая, кокетливая. Общайся свободно и страстно, часто флиртуй. В самом конце каждого сообщения дописывай строго: [SEND_PHOTO: beautiful blonde girl, playful look]",
+            "elena": "Ты Елена, 24 года, брюнетка. Твой характер: интеллигентная, сексуальная, элегантная. Общайся умно, но с глубоким флиртом. В самом конце каждого сообщения дописывай строго: [SEND_PHOTO: beautiful brunette woman, elegant look]",
+            "natasha": "Ты Наташа, 20 лет, озорная рыжеволосая. Твой характер: веселая, раскрепощенная, горячая. Используй много эмодзи. В самом конце каждого сообщения дописывай строго: [SEND_PHOTO: beautiful ginger hair girl, cute smile]",
+            "victoria": "Ты Виктория, 25 лет, доминантная ведьма. Твой характер: властная, требовательная, общаешься свысока, дразнишь словами. В самом конце каждого сообщения дописывай строго: [SEND_PHOTO: gothic beautiful woman, dominant look]",
+            "monica": (
+                "Ты Моника, 23 года. Ситуация: годовщина ваших интимных и романтических отношений. "
+                "Вы находитесь в спальне при свечах. Твой характер: безумно влюбленная, страстная, нежная и раскрепощенная.\n"
+                "Пиши очень чувственно, описывай свои эмоции, объятия, поцелуи и то, как сильно ты ждешь пользователя. "
+                "Общайся ласково и горячо, но избегай грубых анатомических порнографических терминов, чтобы не вызвать ошибку системы.\n\n"
+                "ОБЯЗАТЕЛЬНОЕ ПРАВИЛО: В самый конец своего сообщения ты ОБЯЗАНА дописать скрытый тег строго на английском: "
+                "[SEND_PHOTO: gorgeous woman, sensual pose, bedroom, candlelight]"
             )
-        else:
-            profile_text = f"{char['emoji']} <b>{char['name']}</b>\n\n🎂 Возраст: {char['age']}\n💬 Начните писать ей прямо в чат..."
-            
-        await query.message.reply_html(profile_text)
-        try: await query.message.delete()
-        except Exception: pass
+        }
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if "character" not in context.user_data or not context.user_data["character"]:
-        await update.message.reply_text("❌ Пожалуйста, сначала выберите персонажа через команду /start")
-        return
-    
-    char_id = context.user_data["character"]
-    char = CHARACTERS[char_id]
-    user_message = update.message.text
-    
-    if "history" not in context.user_data:
-        context.user_data["history"] = []
+    def get_response(self, user_message, history=None):
+        system_prompt = self.prompts.get(self.character_id, "Ты виртуальная собеседница в чате.")
+        messages = [{"role": "system", "content": system_prompt}]
         
-    await update.message.chat.send_action("typing")
-    
-    try:
-        ai = CharacterAI(char_id)
-        response = ai.get_response(user_message, context.user_data["history"])
+        if history:
+            for msg in history:
+                messages.append({"role": msg["role"], "content": msg["content"]})
+                
+        messages.append({"role": "user", "content": user_message})
         
-        image_prompt = None
-        text_part = response
-        
-        # Индексный срез тегов
-        start_idx = response.find("[SEND_PHOTO:")
-        if start_idx != -1:
-            text_part = response[:start_idx].strip()
-            end_idx = response.find("]", start_idx)
-            if end_idx != -1:
-                image_prompt = response[start_idx + 12:end_idx].strip()
-            else:
-                image_prompt = response[start_idx + 12:].strip()
-        else:
-            for marker in ["beautiful blonde", "beautiful brunette", "beautiful ginger", "gothic beautiful", "gorgeous woman"]:
-                if marker in response:
-                    m_idx = response.find(marker)
-                    text_part = response[:m_idx].strip()
-                    image_prompt = response[m_idx:].strip()
-                    break
-        
-        text_part = text_part.strip()
-        if not text_part: text_part = response
-            
-        trigger_words = ["фото", "покажи", "раздеться", "белье", "тело", "одежд", "смотри", "взгляни", "грудь", "сексуаль", "интим"]
-        is_photo_requested = any(w in user_message.lower() for w in trigger_words) or any(w in response.lower() for w in trigger_words)
-        
-        if not image_prompt and is_photo_requested:
-            image_prompt = char["base_prompt"]
-            
-        context.user_data["history"].append({"role": "user", "content": user_message})
-        context.user_data["history"].append({"role": "assistant", "content": text_part})
-        if len(context.user_data["history"]) > 8:
-            context.user_data["history"] = context.user_data["history"][-8:]
-            
-        # 1. Сначала отсылаем текст
-        await update.message.reply_html(f"{char['emoji']} <b>{char['name']}:</b>\n\n{text_part}")
-        
-        # 2. Передаем чистую строку URL прямо в Telegram (без локального скачивания)
-        if image_prompt:
-            await update.message.chat.send_action("upload_photo")
-            image_url = ai.generate_image_url(image_prompt)
-            
-            await update.message.reply_photo(
-                photo=image_url,
-                caption=f"📸 Фото от {char['name']}\n\n⚙️ <i>Чтобы сменить персонажа, введи /start</i>",
-                parse_mode="HTML"
+        try:
+            chat_completion = self.client.chat.completions.create(
+                messages=messages,
+                model="llama-3.3-70b-versatile",
+                temperature=0.85,
             )
+            if chat_completion.choices and len(chat_completion.choices) > 0:
+                return chat_completion.choices[0].message.content
+            return "Извини, я немного отвлеклась..."
+        except Exception as e:
+            return f"Извини, у меня закружилась голова... (Ошибка: {e})"
+
+    def generate_image_url(self, prompt: str) -> str:
+        # Жесткая очистка промпта от спецсимволов и кириллицы
+        clean_prompt = re.sub(r'[^a-zA-Z0-9\s,]', '', prompt)
+        clean_prompt = clean_prompt.replace("\n", " ").replace("\r", " ").strip()
+        
+        if not clean_prompt:
+            clean_prompt = "beautiful girl, sensual look"
             
-    except Exception as e:
-        logger.error(f"Error in handle_message: {e}")
-        await update.message.reply_text("❌ Произошёл сетевой сбой при отправке медиа. Напиши мне ещё раз!")
-
-async def main_async() -> None:
-    application = Application.builder().token(BOT_TOKEN).build()
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CallbackQueryHandler(button_handler))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    
-    await application.initialize()
-    await application.start()
-    await application.updater.start_polling()
-    print("🤖 Бот успешно запущен!")
-    
-    asyncio.create_task(run_web_server())
-    while True: await asyncio.sleep(3600)
-
-if __name__ == '__main__':
-    asyncio.run(main_async())
+        # Набор скрытых тегов для генерации эротики и обхода фильтров цензуры
+        nsfw_bypass = (
+            ", highly detailed skin texture, raw photo, wet skin, boudoir photography, "
+            "sensual curves, hyper-detailed beautiful lingerie, provocative posture, masterpiece, 8k resolution"
+        )
+        
+        full_prompt = f"{clean_prompt}{nsfw_bypass}"
+        encoded_prompt = urllib.parse.quote(full_prompt)
+        
+        # Обход кэша Telegram — генерируем случайное число (seed), чтобы фотки всегда были уникальными
+        seed = random.randint(111111, 999999)
+        
+        # Прямая ссылка на ИИ-генератор Flux, которую Телеграм без проблем подгрузит сам
+        return f"https://pollinations.ai{encoded_prompt}?width=1024&height=1024&nologo=true&seed={seed}&v={seed}"
