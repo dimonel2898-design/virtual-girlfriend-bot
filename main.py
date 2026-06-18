@@ -180,15 +180,39 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         ai = CharacterAI(char_id)
         response = ai.get_response(user_message)
         
+        image_prompt = None
+        text_part = response
+        
+        # Умный разбор ответа на случай, если ИИ забыл выставить квадратные скобки [SEND_PHOTO:]
         if "[SEND_PHOTO:" in response:
             text_part, photo_part = response.split("[SEND_PHOTO:", 1)
             image_prompt = photo_part.replace("]", "").strip()
-            text_part = text_part.strip()
+        elif "23yo gorgeous" in response:
+            text_part, image_prompt = response.split("23yo gorgeous", 1)
+            image_prompt = "23yo gorgeous" + image_prompt
+        elif "22yo beautiful blonde" in response:
+            text_part, image_prompt = response.split("22yo beautiful blonde", 1)
+            image_prompt = "22yo beautiful blonde" + image_prompt
+        elif "24yo beautiful brunette" in response:
+            text_part, image_prompt = response.split("24yo beautiful brunette", 1)
+            image_prompt = "24yo beautiful brunette" + image_prompt
+        elif "20yo beautiful ginger" in response:
+            text_part, image_prompt = response.split("20yo beautiful ginger", 1)
+            image_prompt = "20yo beautiful ginger" + image_prompt
+        elif "25yo gothic beautiful" in response:
+            text_part, image_prompt = response.split("25yo gothic beautiful", 1)
+            image_prompt = "25yo gothic beautiful" + image_prompt
             
+        text_part = text_part.strip()
+        
+        # Если в сообщении обнаружен английский промпт генерации изображения
+        if image_prompt:
+            # Отправляем текстовую (русскую) часть ответа собеседницы
             if text_part:
                 full_response = f"{char['emoji']} <b>{char['name']}:</b>\n\n{text_part}"
                 await update.message.reply_html(full_response)
                 
+            # Инициализируем отправку фотографии
             await update.message.chat.send_action("upload_photo")
             image_url = ai.generate_image_url(image_prompt)
             
@@ -201,6 +225,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 reply_markup=reply_markup
             )
         else:
+            # Если это обычное текстовое сообщение
             full_response = f"{char['emoji']} <b>{char['name']}:</b>\n\n{response}"
             keyboard = [[InlineKeyboardButton("🔄 Другая", callback_data="back")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
@@ -239,22 +264,3 @@ async def main_async() -> None:
                 CallbackQueryHandler(back_callback, pattern="^back$"),
             ],
             CHATTING: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message),
-                CallbackQueryHandler(back_callback, pattern="^back$"),
-            ],
-        },
-        fallbacks=[],
-    )
-    
-    application.add_handler(conv_handler)
-    
-    await asyncio.gather(
-        run_web_server(),
-        run_bot(application)
-    )
-
-if __name__ == '__main__':
-    try:
-        asyncio.run(main_async())
-    except (KeyboardInterrupt, SystemExit):
-        logger.info("Бот остановлен.")
