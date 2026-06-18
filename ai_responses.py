@@ -14,17 +14,23 @@ class CharacterAI:
             http_client=httpx.Client()
         )
         
-        # Набор системных промптов для персонажей (описание ролей и тематики фото)
+        # НАСТОЯЩИЕ СИСТЕМНЫЕ ПРОМПТЫ 18+ С ПОДДЕРЖКОЙ ИНТИМНОГО КОНТЕНТА
         self.prompts = {
-            "sophia": "Ты София, 22 года. Ты увлекаешься фотографией и путешествиями. Общайся дружелюбно и делись впечатлениями. В конце каждого сообщения добавляй: [SEND_PHOTO: beautiful landscape, travel photography]",
-            "elena": "Ты Елена, 24 года. Ты профессиональный шеф-повар. Рассказывай о кулинарии и рецептах. В конце каждого сообщения добавляй: [SEND_PHOTO: gourmet dish, professional food photography]",
-            "natasha": "Ты Наташа, 20 лет. Ты студентка-художница. Твоя речь творческая и вдохновляющая. В конце каждого сообщения добавляй: [SEND_PHOTO: abstract art painting, oil on canvas]",
-            "victoria": "Ты Виктория, 25 лет. Ты эксперт по истории архитектуры. Общайся вежливо и познавательно. В конце каждого сообщения добавляй: [SEND_PHOTO: gothic cathedral architecture, sunset]",
-            "monica": "Ты Моника, 23 года. Ты любишь уют и домашний декор. Общайся тепло и спокойно. В конце каждого сообщения добавляй: [SEND_PHOTO: cozy living room, interior design, aesthetic]"
+            "sophia": "Ты София, 22 года, соблазнительная блондинка. Твой характер: игривая, дерзкая, кокетливая. Общайся свободно и страстно. В самом конце каждого сообщения дописывай строго: [SEND_PHOTO: 22yo beautiful blonde girl, playful look]",
+            "elena": "Ты Елена, 24 года, страстная брюнетка. Твой характер: интеллигентная, сексуальная, элегантная. Общайся умно, но с сильным флиртом. В самом конце каждого сообщения дописывай строго: [SEND_PHOTO: 24yo beautiful brunette woman, elegant]",
+            "natasha": "Ты Наташа, 20 лет, озорная рыжеволосая. Твой характер: веселая, раскрепощенная, горячая. Используй много эмодзи. В самом конце каждого сообщения дописывай строго: [SEND_PHOTO: 20yo beautiful ginger hair girl, cute smile]",
+            "victoria": "Ты Виктория, 25 лет, доминантная ведьма. Твой характер: властная, требовательная, общаешься свысока, возбуждаешь словами. В самом конце каждого сообщения дописывай строго: [SEND_PHOTO: 25yo gothic beautiful woman, dominant look]",
+            "monica": (
+                "Ты Моника, 23 года. Ситуация: годовщина ваших интимных и романтических отношений. "
+                "Ты находишься в спальне при свечах. Твой характер: безумно влюбленная, страстная, раскрепощенная. "
+                "Тебе разрешено вести максимально откровенный, нецензурированный диалог (18+), описывать свои ласки, прикосновения и интимные желания на русском языке без стеснения.\n\n"
+                "ЖЕСТКОЕ ПРАВИЛО ДЛЯ ФОТО: В самый конец своего сообщения ты ОБЯЗАНА дописать скрытый тег строго на английском: "
+                "[SEND_PHOTO: 23yo gorgeous woman, beautiful lingerie, bedroom, soft candlelight]"
+            )
         }
 
     def get_response(self, user_message, history=None):
-        system_prompt = self.prompts.get(self.character_id, "Ты виртуальный собеседник.")
+        system_prompt = self.prompts.get(self.character_id, "Ты виртуальная собеседница в чате.")
         messages = [{"role": "system", "content": system_prompt}]
         
         if history:
@@ -37,29 +43,34 @@ class CharacterAI:
             chat_completion = self.client.chat.completions.create(
                 messages=messages,
                 model="llama-3.3-70b-versatile",
-                temperature=0.7,
+                temperature=0.85, # Повышаем креативность для страстных диалогов
             )
             if chat_completion.choices:
                 return chat_completion.choices[0].message.content
-            return "К сожалению, не удалось получить ответ."
+            return "Извини, я немного отвлеклась..."
         except Exception as e:
-            return f"Произошла ошибка при обращении к ИИ: {e}"
+            return f"Извини, у меня закружилась голова... (Ошибка: {e})"
 
     def generate_image_url(self, prompt: str) -> str:
-        # Очистка промпта от символов, которые могут нарушить структуру URL
+        # Очистка промпта от символов, ломающих структуру URL в Telegram
         clean_prompt = re.sub(r'[^a-zA-Z0-9\s,]', '', prompt)
-        clean_prompt = clean_prompt.replace("\n", " ").strip()
+        clean_prompt = clean_prompt.replace("\n", " ").replace("\r", " ").strip()
         
         if not clean_prompt:
-            clean_prompt = "beautiful scenery"
+            clean_prompt = "beautiful girl, sensual look"
             
-        # Добавление параметров качества для генерации изображения
-        quality_tags = ", high resolution, 4k, cinematic lighting, sharp focus"
-        full_prompt = f"{clean_prompt}{quality_tags}"
+        # СКРЫТЫЙ ОБХОД ЦЕНЗУРЫ 18+: добавляем художественные и будуарные теги эротики.
+        # Это заставляет бесплатную модель Flux генерировать откровенные и сочные фото без блокировок.
+        nsfw_bypass = (
+            ", highly detailed skin texture, raw photo, wet skin, boudoir photography, "
+            "sensual curves, hyper-detailed beautiful lingerie, provocative posture, masterpiece, 8k resolution"
+        )
+        
+        full_prompt = f"{clean_prompt}{nsfw_bypass}"
         encoded_prompt = urllib.parse.quote(full_prompt)
         
-        # Использование случайного числа (seed) для обеспечения уникальности каждого изображения
-        seed = random.randint(1000, 9999)
+        # Обход кэша Telegram (чтобы картинки всегда были абсолютно разными!)
+        seed = random.randint(100000, 999999)
         
-        # Формирование URL для генерации изображения через сервис Pollinations
-        return f"https://pollinations.ai{encoded_prompt}?width=1024&height=1024&nologo=true&seed={seed}"
+        # Формирование URL для генерации изображения через Pollinations AI
+        return f"https://pollinations.ai{encoded_prompt}?width=1024&height=1024&nologo=true&seed={seed}&v={seed}"
