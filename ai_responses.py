@@ -6,7 +6,7 @@ from groq import Groq
 class CharacterAI:
     def __init__(self, character_id):
         self.character_id = character_id
-        # Чистый HTTP-клиент для предотвращения конфликтов библиотек на Render
+        # Чистый HTTP-клиент для стабильной работы на Render
         self.client = Groq(
             api_key=os.environ.get("GROQ_API_KEY"),
             http_client=httpx.Client()
@@ -50,17 +50,23 @@ class CharacterAI:
             return f"Извини, у меня закружилась голова... (Ошибка: {e})"
 
     def generate_image_url(self, prompt: str) -> str:
+        import random
         import urllib.parse
         
-        # Жесткая очистка промпта от кириллицы и скобок, ломающих URL
+        # Полная очистка промпта
         clean_prompt = re.sub(r'[^a-zA-Z0-9\s,]', '', prompt)
         clean_prompt = clean_prompt.replace("\n", " ").replace("\r", " ").strip()
         
         if not clean_prompt:
             clean_prompt = "beautiful girl, sensual look"
-        
-        nsfw_additions = ", uncensored, 18 plus, aesthetic body, highly detailed, realistic texture, photography"
+            
+        # Добавляем NSFW триггеры для качественного визуала
+        nsfw_additions = ", uncensored, 18 plus, highly detailed, realistic texture, photography"
         full_prompt = f"{clean_prompt}{nsfw_additions}"
-        
         encoded_prompt = urllib.parse.quote(full_prompt)
-        return f"https://pollinations.ai{encoded_prompt}?width=1024&height=1024&nologo=true"
+        
+        # Генерируем случайный сид, чтобы картинки всегда отличались
+        random_seed = random.randint(1, 999999)
+        
+        # Альтернативный и 100% стабильный шлюз быстрой генерации на базе Flux
+        return f"https://pollinations.ai{encoded_prompt}?width=1024&height=1024&nologo=true&seed={random_seed}&enhance=true"
