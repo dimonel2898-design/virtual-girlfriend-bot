@@ -1,5 +1,7 @@
 import os
 import logging
+import random
+import urllib.parse
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from telegram import Update
@@ -34,16 +36,51 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_text = update.message.text
         history = context.user_data.get("history", [])
 
+        # Получаем текстовый ответ от ИИ модели Llama
         response = ai.get_response(user_text, history)
 
+        # Сохраняем сообщения в историю контекста чата
         history.append({"role": "user", "content": user_text})
         history.append({"role": "assistant", "content": response})
         context.user_data["history"] = history[-8:]
 
-        await update.message.reply_text(response)
+        # Список триггеров для отправки сгенерированных фотографий
+        photo_triggers = ["фото", "фотку", "фотографию", "покажи себя", "как выглядишь", "своё фото", "селфи", "снимок"]
+        user_text_lower = user_text.lower()
+
+        # Проверяем, содержит ли текст пользователя запрос на фото
+        if any(trigger in user_text_lower for trigger in photo_triggers):
+            # 1. Сначала отправляем кокетливый текстовый ответ ИИ
+            await update.message.reply_text(response)
+            
+            # 2. Включаем анимацию "отправка фото" в интерфейсе Telegram
+            await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="upload_photo")
+            
+            # 3. Извлекаем описание внешности (промпт) из ai_responses.py
+            # Если метода get_image_prompt нет, используем дефолтный базовый промпт
+            if hasattr(ai, "get_image_prompt"):
+                base_prompt = ai.get_image_prompt()
+            else:
+                base_prompt = "A beautiful 22-year-old playful girl, cute smile, blonde hair, photorealistic, 4k"
+            
+            # Генерируем уникальный seed, чтобы фотографии каждый раз отличались ракурсом и одеждой
+            seed = random.randint(1, 999999)
+            encoded_prompt = urllib.parse.quote(base_prompt)
+            
+            # Формируем прямую ссылку на бесплатный генератор изображений Pollinations (модель Flux)
+            photo_url = f"https://pollinations.ai{encoded_prompt}?width=1024&height=1024&seed={seed}&model=flux"
+            
+            # 4. Отправляем пользователю реальное изображение
+            await update.message.reply_photo(
+                photo=photo_url,
+                caption="📸 Лови моё фото! Как тебе? 😉"
+            )
+        else:
+            # Если пользователь фото не просил — просто присылаем обычный текст
+            await update.message.reply_text(response)
 
     except Exception as e:
-        logger.error(e)
+        logger.error(f"Ошибка в handle_message: {e}")
         await update.message.reply_text("💔 Ошибка, попробуй ещё раз")
 
 # ---------------- REGISTER ----------------
@@ -86,7 +123,7 @@ async def lifespan(app: FastAPI):
     await tg_app.stop()
     await tg_app.shutdown()
 
-# Инициализируем FastAPI с новым синтаксисом жизненного цикла приложений
+# Инициализируем FastAPI с менеджером жизненного цикла приложений
 app = FastAPI(lifespan=lifespan)
 
 # ---------------- WEBHOOK ENDPOINT ----------------
