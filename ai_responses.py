@@ -36,7 +36,6 @@ class CharacterAI:
                 model="llama-3.3-70b-versatile",
                 temperature=0.8,
             )
-            # ИСПРАВЛЕНО: Добавлен правильный индекс [0] для получения текста
             if chat_completion.choices:
                 return chat_completion.choices[0].message.content
             return "Извини, я отвлеклась..."
@@ -45,8 +44,14 @@ class CharacterAI:
 
     def generate_image_url(self, prompt: str) -> str:
         import urllib.parse
-        clean_prompt = prompt.replace("\n", " ").replace("\r", " ").strip()
+        # Тотальная очистка промпта от мусора, ломающего URL-ссылку в Telegram
+        clean_prompt = prompt.replace("\n", " ").replace("\r", " ")
+        clean_prompt = clean_prompt.replace("[", "").replace("]", "")
+        clean_prompt = clean_prompt.replace("'", "").replace('"', "").strip()
+        
+        # Добавляем теги для генерации красивой эротики
         nsfw_additions = ", uncensored, 18 plus, aesthetic body, highly detailed, realistic texture, photography"
         full_prompt = f"{clean_prompt}{nsfw_additions}"
+        
         encoded_prompt = urllib.parse.quote(full_prompt)
         return f"https://pollinations.ai{encoded_prompt}?width=1024&height=1024&nologo=true"
