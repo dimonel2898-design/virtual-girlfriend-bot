@@ -1,33 +1,3 @@
-import os
-import logging
-import random
-import httpx
-from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request
-from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
-from telegram.error import InvalidToken
-
-from ai_responses import CharacterAI
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# ---------------- ENV ----------------
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "secret")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")
-
-# ---------------- TELEGRAM APP ----------------
-if not BOT_TOKEN:
-    raise RuntimeError("❌ BOT_TOKEN не найден в ENV")
-
-tg_app = Application.builder().token(BOT_TOKEN).build()
-
-# ---------------- HANDLERS ----------------
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🚀 Bot V3.1 is running")
-
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         char_id = context.user_data.get("char", "sophia")
@@ -44,11 +14,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         history.append({"role": "assistant", "content": response})
         context.user_data["history"] = history[-8:]
 
-        # Сокращенные корни триггеров, чтобы ловить любые опечатки и падежи (фотку, селфи, выглядешь, выглядиш)
+        # Сокращенные корни триггеров, чтобы ловить любые опечатки и падежи
         photo_triggers = ["фот", "снимок", "селфи", "выгляди", "покажи", "купальник", "купальнике"]
         user_text_lower = user_text.lower()
 
-        # Сначала ВСЕГДА отправляем текстовый ответ ИИ, чтобы пользователь видел реакцию в чате
+        # Сначала ВСЕГДА отправляем текстовый ответ ИИ
         await update.message.reply_text(response)
 
         # Проверяем, содержит ли текст пользователя запрос на фото
@@ -73,21 +43,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     if "bikini" not in base_prompt:
                         base_prompt += ", wearing a bikini on a beautiful beach background"
 
-                # Генерируем случайный seed, чтобы новые фотографии всегда отличались ракурсом
+                # Генерируем случайный seed
                 seed = random.randint(1, 999999)
                 
-                # Формируем промпт в чистую текстовую строку, разделенную дефисами
-                clean_prompt = base_prompt.replace(",", "").replace(".", "").replace("'", "").replace(" ", "-").lower()
-                photo_url = f"https://pollinations.ai{clean_prompt}-seed-{seed}.jpg"
+                # ИСПРАВЛЕНО: Безопасное кодирование промпта без ломания DNS-имени хоста
+                import urllib.parse
+                encoded_prompt = urllib.parse.quote(base_prompt)
+                photo_url = f"https://pollinations.ai{encoded_prompt}&seed={seed}&width=1024&height=1024&model=flux"
                 
-                # СКАЧИВАНИЕ КАРТИНКИ В ПАМЯТЬ: Бот сам дождется генерации и скачает файл
+                # Скачиваем картинку в память сервера
                 async with httpx.AsyncClient(timeout=45.0) as client:
                     img_response = await client.get(photo_url)
                     
                     if img_response.status_code == 200:
                         photo_bytes = img_response.content
                         
-                        # Отправляем скачанные байты как готовое фото (ошибки URL теперь исключены)
+                        # Отправляем скачанные байты как готовое фото
                         await update.message.reply_photo(
                             photo=photo_bytes,
                             caption="📸 Лови моё фото! Как тебе? 😉"
@@ -102,65 +73,3 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Общая ошибка в handle_message: {e}")
         await update.message.reply_text("💔 Ошибка, попробуй ещё раз")
-
-# ---------------- REGISTER ----------------
-tg_app.add_handler(CommandHandler("start", start))
-tg_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-
-# ---------------- LIFESPAN (STARTUP / SHUTDOWN) ----------------
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # --- Проверка токена ---
-    try:
-        me = await tg_app.bot.get_me()
-        logger.info(f"✅ TOKEN OK: @{me.username}")
-    except InvalidToken:
-        raise RuntimeError("❌ BOT_TOKEN НЕВАЛИДЕН")
-    except Exception as e:
-        logger.error(f"❌ Ошибка проверки токена: {e}")
-        raise
-
-    # --- Инициализация бота ---
-    await tg_app.initialize()
-    await tg_app.start()
-
-    # --- Установка Вебхука ---
-    if WEBHOOK_URL:
-        webhook_target = f"{WEBHOOK_URL}/webhook"
-        await tg_app.bot.set_webhook(
-            url=webhook_target,
-            secret_token=WEBHOOK_SECRET
-        )
-        logger.info(f"🛰️ Webhook set to: {webhook_target}")
-    else:
-        logger.warning("⚠️ WEBHOOK_URL не задан, бот не будет получать сообщения!")
-
-    logger.info("🚀 BOT STARTED SUCCESSFULLY")
-    
-    yield
-    
-    # --- Корректное отключение при остановке сервера ---
-    await tg_app.stop()
-    await tg_app.shutdown()
-
-# Инициализируем FastAPI с менеджером жизненного цикла приложений
-app = FastAPI(lifespan=lifespan)
-
-# ---------------- WEBHOOK ENDPOINT ----------------
-@app.post("/webhook")
-async def webhook(req: Request):
-    try:
-        # Проверяем секретный токен от Telegram для безопасности
-        x_telegram_token = req.headers.get("X-Telegram-Bot-Api-Secret-Token")
-        if WEBHOOK_SECRET and x_telegram_token != WEBHOOK_SECRET:
-            logger.warning("Unauthorized webhook request blocked")
-            return {"ok": False, "error": "Unauthorized"}
-
-        data = await req.json()
-        update = Update.de_json(data, tg_app.bot)
-        await tg_app.process_update(update)
-
-    except Exception as e:
-        logger.error(f"Webhook error: {e}")
-
-    return {"ok": True}
