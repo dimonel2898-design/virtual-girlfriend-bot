@@ -121,7 +121,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         image_prompt = None
         text_part = response
         
-        # Четкое и стабильное вырезание тега картинки
         start_idx = response.find("[SEND_PHOTO:")
         if start_idx != -1:
             text_part = response[:start_idx].strip()
@@ -152,10 +151,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         if len(context.user_data["history"]) > 8:
             context.user_data["history"] = context.user_data["history"][-8:]
             
-        # 1. Отправляем текстовое сообщение
+        # 1. Сначала отсылаем текст
         await update.message.reply_html(f"{char['emoji']} <b>{char['name']}:</b>\n\n{text_part}")
         
-        # 2. ИСПРАВЛЕНО: Прямая отправка ссылки в Telegram без скачивания на локальный сервер Render
+        # 2. Передаем чистую строку URL прямо в Telegram (без локального скачивания)
         if image_prompt:
             await update.message.chat.send_action("upload_photo")
             image_url = ai.generate_image_url(image_prompt)
@@ -168,7 +167,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             
     except Exception as e:
         logger.error(f"Error in handle_message: {e}")
-        await update.message.reply_text("❌ Извини, у меня закружилась голова, повтори фразу еще раз!")
+        await update.message.reply_text("❌ Произошёл сетевой сбой при отправке медиа. Напиши мне ещё раз!")
 
 async def main_async() -> None:
     application = Application.builder().token(BOT_TOKEN).build()
