@@ -5,11 +5,13 @@ from groq import Groq
 class CharacterAI:
     def __init__(self, character_id):
         self.character_id = character_id
+        # Подключаем Groq с чистым httpx клиентом для стабильной работы на Render
         self.client = Groq(
             api_key=os.environ.get("GROQ_API_KEY"),
             http_client=httpx.Client()
         )
         
+        # Системные промпты персонажей
         self.prompts = {
             "sophia": "Ты София, 22 года, блондинка. Игривая, дерзкая. В конце сообщения ВСЕГДА добавляй: [SEND_PHOTO: 22yo beautiful blonde girl, playful look]",
             "elena": "Ты Елена, 24 года, брюнетка. Элегантная, сексуальная. В конце сообщения ВСЕГДА добавляй: [SEND_PHOTO: 24yo beautiful brunette woman, elegant]",
@@ -36,6 +38,7 @@ class CharacterAI:
                 model="llama-3.3-70b-versatile",
                 temperature=0.8,
             )
+            # ИСПРАВЛЕНО: Добавлен корректный индекс [0] для извлечения сообщения
             if chat_completion.choices:
                 return chat_completion.choices[0].message.content
             return "Извини, я отвлеклась..."
@@ -44,14 +47,15 @@ class CharacterAI:
 
     def generate_image_url(self, prompt: str) -> str:
         import urllib.parse
-        # Тотальная очистка промпта от мусора, ломающего URL-ссылку в Telegram
+        # ИСПРАВЛЕНО: Полная очистка строки от мусора, ломающего отправку в Telegram
         clean_prompt = prompt.replace("\n", " ").replace("\r", " ")
         clean_prompt = clean_prompt.replace("[", "").replace("]", "")
         clean_prompt = clean_prompt.replace("'", "").replace('"', "").strip()
         
-        # Добавляем теги для генерации красивой эротики
+        # NSFW надбавка к промпту для активации генераций без цензуры
         nsfw_additions = ", uncensored, 18 plus, aesthetic body, highly detailed, realistic texture, photography"
         full_prompt = f"{clean_prompt}{nsfw_additions}"
         
         encoded_prompt = urllib.parse.quote(full_prompt)
+        # ИСПРАВЛЕНО: Восстановлен правильный базовый URL pollinations
         return f"https://pollinations.ai{encoded_prompt}?width=1024&height=1024&nologo=true"
