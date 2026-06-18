@@ -1,7 +1,8 @@
 import os
 import logging
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
-from telegram import Update, Bot
+from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 from telegram.error import InvalidToken
 
@@ -15,26 +16,10 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "secret")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
-app = FastAPI()
-
-# ---------------- TOKEN CHECK ----------------
-def check_token_or_crash():
-    if not BOT_TOKEN:
-        raise RuntimeError("❌ BOT_TOKEN не найден в ENV")
-
-    try:
-        bot = Bot(token=BOT_TOKEN)
-        me = bot.get_me()
-        logger.info(f"✅ TOKEN OK: @{me.username}")
-        return bot
-
-    except InvalidToken:
-        raise RuntimeError("❌ BOT_TOKEN НЕВАЛИДЕН")
-
-# проверка ДО старта приложения
-check_token_or_crash()
-
 # ---------------- TELEGRAM APP ----------------
+if not BOT_TOKEN:
+    raise RuntimeError("❌ BOT_TOKEN не найден в ENV")
+
 tg_app = Application.builder().token(BOT_TOKEN).build()
 
 # ---------------- HANDLERS ----------------
@@ -65,10 +50,55 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 tg_app.add_handler(CommandHandler("start", start))
 tg_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-# ---------------- WEBHOOK ----------------
+# ---------------- LIFESPAN (STARTUP / SHUTDOWN) ----------------
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # --- Проверка токена ---
+    try:
+        me = await tg_app.bot.get_me()
+        logger.info(f"✅ TOKEN OK: @{me.username}")
+    except InvalidToken:
+        raise RuntimeError("❌ BOT_TOKEN НЕВАЛИДЕН")
+    except Exception as e:
+        logger.error(f"❌ Ошибка проверки токена: {e}")
+        raise
+
+    # --- Инициализация бота ---
+    await tg_app.initialize()
+    await tg_app.start()
+
+    # --- Установка Вебхука ---
+    if WEBHOOK_URL:
+        webhook_target = f"{WEBHOOK_URL}/webhook"
+        await tg_app.bot.set_webhook(
+            url=webhook_target,
+            secret_token=WEBHOOK_SECRET
+        )
+        logger.info(f"🛰️ Webhook set to: {webhook_target}")
+    else:
+        logger.warning("⚠️ WEBHOOK_URL не задан, бот не будет получать сообщения!")
+
+    logger.info("🚀 BOT STARTED SUCCESSFULLY")
+    
+    yield
+    
+    # --- Корректное отключение при остановке сервера ---
+    await tg_app.stop()
+    await tg_app.shutdown()
+
+# Инициализируем FastAPI с новым синтаксисом жизненного цикла приложений
+app = FastAPI(lifespan=lifespan)
+
+# ---------------- WEBHOOK ENDPOINT ----------------
 @app.post("/webhook")
 async def webhook(req: Request):
     try:
+        # Проверяем секретный токен от Telegram для безопасности
+        x_telegram_token = req.headers.get("X-Telegram-Bot-Api-Secret-Token")
+        if WEBHOOK_SECRET and x_telegram_token != WEBHOOK_SECRET:
+            logger.warning("Unauthorized webhook request blocked")
+            return {"ok": False, "error": "Unauthorized"}
+
         data = await req.json()
         update = Update.de_json(data, tg_app.bot)
         await tg_app.process_update(update)
@@ -77,17 +107,3 @@ async def webhook(req: Request):
         logger.error(f"Webhook error: {e}")
 
     return {"ok": True}
-
-# ---------------- STARTUP ----------------
-@app.on_event("startup")
-async def startup():
-    await tg_app.initialize()
-    await tg_app.start()
-
-    if WEBHOOK_URL:
-        await tg_app.bot.set_webhook(
-            url=f"{WEBHOOK_URL}/webhook",
-            secret_token=WEBHOOK_SECRET
-        )
-
-    logger.info("🚀 BOT STARTED SUCCESSFULLY")
