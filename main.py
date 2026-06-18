@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import re
 import uvicorn
 from fastapi import FastAPI
 from dotenv import load_dotenv
@@ -12,7 +13,6 @@ from telegram.ext import (
     CallbackQueryHandler,
     ContextTypes,
     filters,
-    ConversationHandler,
 )
 from ai_responses import CharacterAI
 
@@ -24,7 +24,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-CHOOSING_CHARACTER, CHATTING = range(2)
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 app = FastAPI()
@@ -47,63 +46,74 @@ CHARACTERS = {
     "monica": {"name": "Моника (Сюрприз)", "age": 23, "description": "Сюрприз на годовщину ❤️", "personality": "Взволнованная, любящая", "emoji": "🎁", "base_prompt": "23yo gorgeous woman, beautiful lingerie, bedroom, soft candlelight"},
 }
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     context.user_data["history"] = []
-    disclaimer = "⚠️ <b>ВНИМАНИЕ: КОНТЕНТ 18+</b>\n\nВам есть 18 лет?"
+    context.user_data["character"] = None
+    
+    disclaimer = (
+        "⚠️ <b>ВНИМАНИЕ: КОНТЕНТ 18+</b>\n\n"
+        "Вам есть 18 лет?\n\n"
+        "🤖 Бот использует Groq AI (LLaMA 3.3)\n"
+        "⚡ Бесплатный • Без ограничений • Без цензуры"
+    )
     keyboard = [[InlineKeyboardButton("✅ Согласен", callback_data="proceed"), InlineKeyboardButton("❌ Нет", callback_data="exit")]]
-    await update.message.reply_html(disclaimer, reply_markup=InlineKeyboardMarkup(keyboard))
-    return CHOOSING_CHARACTER
+    
+    if update.message:
+        await update.message.reply_html(disclaimer, reply_markup=InlineKeyboardMarkup(keyboard))
+    elif update.callback_query:
+        await update.callback_query.message.reply_html(disclaimer, reply_markup=InlineKeyboardMarkup(keyboard))
 
-async def proceed_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
-    text = "👥 <b>Выберите девушку:</b>\n\n"
-    keyboard = []
-    for char_id, char_data in CHARACTERS.items():
-        text += f"{char_data['emoji']} <b>{char_data['name']}</b> ({char_data['age']})\n"
-        keyboard.append([InlineKeyboardButton(f"{char_data['emoji']} {char_data['name']}", callback_data=f"char_{char_id}")])
-    await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
-    return CHOOSING_CHARACTER
+    data = query.data
 
-async def exit_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.callback_query.answer()
-    await update.callback_query.edit_message_text("До свидания! 👋")
-    return -1
+    if data == "exit":
+        await query.edit_message_text("До свидания! 👋")
+        return
 
-async def character_selected(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    query = update.callback_query
-    await query.answer()
-    char_id = query.data.replace("char_", "")
-    if char_id not in CHARACTERS: return CHOOSING_CHARACTER
-    
-    context.user_data["character"] = char_id
-    context.user_data["history"] = []
-    char = CHARACTERS[char_id]
-    
-    if char_id == "monica":
-        profile_text = (
-            f"🎁 <b>{char['name']}</b>\n\n"
-            f"Вы приходите домой — вокруг горят свечи, на столе стоит Ваше любимое блюдо, "
-            f"а на двери в спальню висит записка: <i>«закройте глаза»</i>.\n\n"
-            f"Голос Моники доносится из глубины комнаты. Она звучит взволнованно и чуть нервно:\n"
-            f"«О боже, я так нервничаю! Но ты выглядишь потрясающе, правда. Я подготовила небольшой сюрприз для нашей годовщины...»\n\n"
-            f"💬 <b>Ответьте Монике, чтобы начать сценарий...</b>"
-        )
-    else:
-        profile_text = f"{char['emoji']} <b>{char['name']}</b>\n\n🎂 Возраст: {char['age']}\n💬 Начните писать..."
+    if data == "proceed" or data == "back":
+        context.user_data["character"] = None
+        context.user_data["history"] = []
+        text = "👥 <b>Выберите девушку для общения:</b>\n\n"
+        keyboard = []
+        for char_id, char_data in CHARACTERS.items():
+            text += f"{char_data['emoji']} <b>{char_data['name']}</b> ({char_data['age']})\n"
+            keyboard.append([InlineKeyboardButton(f"{char_data['emoji']} {char_data['name']}", callback_data=f"char_{char_id}")])
+        await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+        return
+
+    if data.startswith("char_"):
+        char_id = data.replace("char_", "")
+        if char_id not in CHARACTERS:
+            return
         
-    await query.edit_message_text(profile_text, parse_mode="HTML")
-    return CHATTING
+        context.user_data["character"] = char_id
+        context.user_data["history"] = []
+        char = CHARACTERS[char_id]
+        
+        if char_id == "monica":
+            profile_text = (
+                f"🎁 <b>{char['name']}</b>\n\n"
+                f"Вы приходите домой — вокруг горят свечи, на столе стоит Ваше любимое блюдо, "
+                f"а на двери в спальню висит записка: <i>«закройте глаза»</i>.\n\n"
+                f"Голос Моники доносится из глубины комнаты. Она звучит взволнованно и чуть нервно:\n"
+                f"«О боже, я так нервничаю! Но ты выглядишь потрясающе, правда. Я подготовила небольшой сюрприз для нашей годовщины...»\n\n"
+                f"💬 <b>Ответьте Монике прямо в чат, чтобы начать сценарий...</b>"
+            )
+        else:
+            profile_text = f"{char['emoji']} <b>{char['name']}</b>\n\n🎂 Возраст: {char['age']}\n💬 Начните писать ей прямо в чат..."
+            
+        await query.message.reply_html(profile_text)
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
 
-async def back_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.callback_query.answer()
-    context.user_data.pop("character", None)
-    return await proceed_callback(update, context)
-
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    if "character" not in context.user_data:
-        await update.message.reply_text("❌ Выберите персонаж через команду /start")
-        return CHOOSING_CHARACTER
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if "character" not in context.user_data or not context.user_data["character"]:
+        await update.message.reply_text("❌ Пожалуйста, сначала выберите персонажа кнопкой или введите команду /start")
+        return
     
     char_id = context.user_data["character"]
     char = CHARACTERS[char_id]
@@ -121,7 +131,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         image_prompt = None
         text_part = response
         
-        # Надежный индексный срез строки
         start_idx = response.find("[SEND_PHOTO:")
         if start_idx != -1:
             text_part = response[:start_idx].strip()
@@ -142,23 +151,19 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         if not text_part:
             text_part = response
             
-        # Запасной триггер, если ИИ пропустил тег, но тема интимная
         trigger_words = ["фото", "покажи", "раздеться", "белье", "тело", "одежд", "смотри", "взгляни", "грудь", "сексуаль", "интим"]
         is_photo_requested = any(w in user_message.lower() for w in trigger_words) or any(w in response.lower() for w in trigger_words)
         
         if not image_prompt and is_photo_requested:
             image_prompt = char["base_prompt"]
             
-        # Запись реплик в память бота
         context.user_data["history"].append({"role": "user", "content": user_message})
         context.user_data["history"].append({"role": "assistant", "content": text_part})
         if len(context.user_data["history"]) > 8:
             context.user_data["history"] = context.user_data["history"][-8:]
             
-        # 1. Отправляем текст
         await update.message.reply_html(f"{char['emoji']} <b>{char['name']}:</b>\n\n{text_part}")
         
-        # 2. Шлем фото
         if image_prompt:
             await update.message.chat.send_action("upload_photo")
             image_url = ai.generate_image_url(image_prompt)
@@ -171,33 +176,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     except Exception as e:
         logger.error(f"Error in handle_message: {e}")
         await update.message.reply_text("✨ (Я попыталась отправить тебе фото, но сеть немного лагает... Напиши мне что-нибудь еще!)")
-    
-    return CHATTING
 
 async def main_async() -> None:
     application = Application.builder().token(BOT_TOKEN).build()
     
-    conv_handler = ConversationHandler(
-        entry_points=[CommandHandler("start", start)],
-        states={
-            CHOOSING_CHARACTER: [
-                CallbackQueryHandler(proceed_callback, pattern="^proceed$"),
-                CallbackQueryHandler(exit_callback, pattern="^exit$"),
-                CallbackQueryHandler(character_selected, pattern="^char_"),
-            ],
-            CHATTING: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message),
-            ],
-        },
-        fallbacks=[CommandHandler("start", start)],
-    )
-    application.add_handler(conv_handler)
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CallbackQueryHandler(button_handler))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
-    # Пошаговый старт
     await application.initialize()
     await application.start()
     await application.updater.start_polling()
-    print("🤖 Бот успешно запущен в режиме polling!")
+    print("🤖 Бот успешно запущен без багов ConversationHandler!")
     
     asyncio.create_task(run_web_server())
     
