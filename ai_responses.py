@@ -47,7 +47,7 @@ class CharacterAI:
                 temperature=0.85,
             )
             if chat_completion.choices and len(chat_completion.choices) > 0:
-                return chat_completion.choices.message.content
+                return chat_completion.choices[0].message.content
             return "Извини, я немного отвлеклась..."
         except Exception as e:
             return f"Извини, у меня закружилась голова... (Ошибка: {e})"
@@ -72,5 +72,5 @@ class CharacterAI:
         # Обход кэша Telegram: генерируем случайный сид, чтобы при каждой реплике Моника слала РАЗНЫЕ фото
         seed = random.randint(111111, 999999)
         
-        # Прямая ссылка на ИИ-генератор Flux, который работает безотказно
+        # Возвращаем прямую ссылку на безлимитный ИИ-генератор Flux, который Telegram принимает без сбоев
         return f"https://pollinations.ai{encoded_prompt}?width=1024&height=1024&nologo=true&seed={seed}&v={seed}"
