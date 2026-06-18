@@ -14,4 +14,5 @@ class CharacterAI:
 
         return responses.get(
             self.character_id,
-            f"
+            f"Неизвестный персонаж: {message}"
+        )
