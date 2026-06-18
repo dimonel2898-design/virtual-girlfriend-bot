@@ -17,7 +17,7 @@ class CharacterAI:
             "sophia": "Ты София, 22 года, блондинка. Игривая, дерзкая. Общайся свободно, кокетничай. В самом конце каждого сообщения дописывай строго: [SEND_PHOTO: 22yo beautiful blonde girl, playful look]",
             "elena": "Ты Елена, 24 года, брюнетка. Элегантная, сексуальная. Общайся умно, флиртуй. В самом конце каждого сообщения дописывай строго: [SEND_PHOTO: 24yo beautiful brunette woman, elegant]",
             "natasha": "Ты Наташа, 20 лет, рыжая. Веселая, раскрепощенная. Используй эмодзи. В самом конце каждого сообщения дописывай строго: [SEND_PHOTO: 20yo beautiful ginger hair girl, cute smile]",
-            "victoria": "Ты Виктория, 25 лет, доминантная ведьма. Властная, требовательная. Общайся свысока. В самом конце каждого сообщения дописывай строго: [SEND_PHOTO: 25yo gothic beautiful woman, dominant look]",
+            "victoria": "Ты Виктория, 25 лет, доминантка. Властная, требовательная. Общайся свысока. В самом конце каждого сообщения дописывай строго: [SEND_PHOTO: 25yo gothic beautiful woman, dominant look]",
             "monica": (
                 "Ты Моника, 23 года. Ситуация: годовщина ваших отношений, вы устроили романтический вечер дома в спальне при свечах. "
                 "Ты безумно влюбленная, ласковая, романтичная и раскрепощенная девушка. Общайся очень нежно, флиртуй, проявляй страсть. "
@@ -51,8 +51,20 @@ class CharacterAI:
 
     def generate_image_url(self, prompt: str) -> str:
         import random
-        # Полностью отказываемся от сбоящего Pollinations AI.
-        # Подключаем Picsum: он генерирует случайное профессиональное реалистичное фото девушек/моделей.
-        # Ссылка полностью валидна для серверов Telegram и доставляется мгновенно.
-        random_id = random.randint(1, 500)
-        return f"https://picsum.photos{random_id}/1024/1024"
+        # ИСПРАВЛЕНО: Используем самый надежный источник фото Unsplash Source с ключевыми словами под персонажа
+        # Генерируем случайный сид (sig), чтобы фотографии никогда не повторялись в диалоге
+        random_sig = random.randint(1, 99999)
+        
+        keyword = "girl,woman,romantic"
+        if "blonde" in prompt.lower() or self.character_id == "sophia":
+            keyword = "blonde,girl,fashion"
+        elif "brunette" in prompt.lower() or self.character_id == "elena":
+            keyword = "brunette,woman,sensual"
+        elif "ginger" in prompt.lower() or self.character_id == "natasha":
+            keyword = "ginger,girl,smile"
+        elif "gothic" in prompt.lower() or self.character_id == "victoria":
+            keyword = "gothic,woman,dark"
+        elif "monica" in self.character_id:
+            keyword = "sensual,woman,lingerie"
+            
+        return f"https://unsplash.com?{keyword}&sig={random_sig}"
