@@ -32,8 +32,7 @@ logger = logging.getLogger(__name__)
 CHOOSING_CHARACTER, CHATTING = range(2)
 
 # Пытаемся взять токен из переменных окружения Render, если его там нет — берем заглушку
-BOT_TOKEN = os.getenv("BOT_TOKEN", "8329335388:AAE9l42XZUecGMnbLEezc3NAfW6CBXvNFJU")
-
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 # ----------------- НАСТРОЙКА ВЕБ-СЕРВЕРА ДЛЯ RENDER -----------------
 app = FastAPI()
 
