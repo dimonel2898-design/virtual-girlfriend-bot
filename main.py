@@ -1,7 +1,6 @@
 import os
 import logging
 import random
-import urllib.parse
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from telegram import Update
@@ -76,12 +75,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 # Генерируем случайный seed, чтобы новые фотографии всегда отличались ракурсом
                 seed = random.randint(1, 999999)
                 
-                # Кодируем промпт для URL-адреса, заменяя пробелы на безопасный символ '+'
-                # Это решает проблему падения отправки медиа на серверах Telegram API
-                encoded_prompt = urllib.parse.quote_plus(base_prompt)
+                # Форматируем промпт в абсолютно чистую текстовую строку, разделенную дефисами.
+                # Избавляемся от запятых, точек и спецсимволов, которые ломают загрузку картинок в Telegram API.
+                clean_prompt = base_prompt.replace(",", "").replace(".", "").replace("'", "").replace(" ", "-").lower()
                 
-                # Формируем прямую ссылку на бесплатный генератор изображений Pollinations (модель Flux)
-                photo_url = f"https://pollinations.ai{encoded_prompt}?width=1024&height=1024&seed={seed}&model=flux"
+                # Собираем прямую короткую ссылку без параметров запроса (?)
+                photo_url = f"https://pollinations.ai{clean_prompt}-seed-{seed}"
                 
                 # Отправляем пользователю настоящее изображение
                 await update.message.reply_photo(
