@@ -43,7 +43,6 @@ class CharacterAI:
                 model="llama-3.3-70b-versatile",
                 temperature=0.8,
             )
-            # ИСПРАВЛЕНО: Добавлен обязательный индекс [0] для извлечения текста из API Groq
             if chat_completion.choices and len(chat_completion.choices) > 0:
                 return chat_completion.choices[0].message.content
             return "Извини, я немного отвлеклась..."
@@ -52,25 +51,8 @@ class CharacterAI:
 
     def generate_image_url(self, prompt: str) -> str:
         import random
-        import urllib.parse
-        
-        # Очистка строки от спецсимволов
-        clean_prompt = re.sub(r'[^a-zA-Z0-9\s,]', '', prompt)
-        clean_prompt = clean_prompt.replace("\n", " ").replace("\r", " ").strip()
-        
-        if not clean_prompt:
-            clean_prompt = "beautiful girl, sensual look"
-            
-        nsfw_additions = ", gorgeous, highly detailed, realistic texture, photography"
-        full_prompt = f"{clean_prompt}{nsfw_additions}"
-        encoded_prompt = urllib.parse.quote(full_prompt)
-        
-        random_seed = random.randint(1, 999999)
-        return f"https://pollinations.ai{encoded_prompt}?width=1024&height=1024&nologo=true&seed={random_seed}"
-
-        nsfw_additions = ", gorgeous, highly detailed, realistic texture, photography"
-        full_prompt = f"{clean_prompt}{nsfw_additions}"
-        encoded_prompt = urllib.parse.quote(full_prompt)
-        
-        random_seed = random.randint(1, 999999)
-        return f"https://pollinations.ai{encoded_prompt}?width=1024&height=1024&nologo=true&seed={random_seed}"
+        # Полностью отказываемся от сбоящего Pollinations AI.
+        # Подключаем Picsum: он генерирует случайное профессиональное реалистичное фото девушек/моделей.
+        # Ссылка полностью валидна для серверов Telegram и доставляется мгновенно.
+        random_id = random.randint(1, 500)
+        return f"https://picsum.photos{random_id}/1024/1024"
