@@ -44,7 +44,7 @@ CHARACTERS = {
     "elena": {"name": "Елена", "age": 24, "description": "Страстная брюнетка", "personality": "Интеллигентная, сексуальная", "emoji": "💃", "base_prompt": "24yo beautiful brunette woman, elegant"},
     "natasha": {"name": "Наташа", "age": 20, "description": "Озорная рыжеволосая", "personality": "Веселая, раскрепощенная", "emoji": "🔥", "base_prompt": "20yo beautiful ginger hair girl, cute smile"},
     "victoria": {"name": "Виктория", "age": 25, "description": "Доминантная ведьма", "personality": "Властная, требовательная", "emoji": "👿", "base_prompt": "25yo gothic beautiful woman, dominant look"},
-    "monica": {"name": "Моника (Сюрприз)", "age": 23, "description": "Сюрприз на годовщину ❤️", "personality": "Взволнованная, любящая", "emoji": "🎁", "base_prompt": "23yo gorgeous woman, beautiful lingerie"},
+    "monica": {"name": "Моника (Сюрприз)", "age": 23, "description": "Сюрприз на годовщину ❤️", "personality": "Взволнованная, любящая", "emoji": "🎁", "base_prompt": "23yo gorgeous woman, beautiful lingerie, bedroom"},
 }
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -104,7 +104,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if "character" not in context.user_data or not context.user_data["character"]:
-        await update.message.reply_text("❌ Пожалуйста, сначала выберите персонажа кнопкой или введите команду /start")
+        await update.message.reply_text("❌ Пожалуйста, сначала выберите персонажа через команду /start")
         return
     
     char_id = context.user_data["character"]
@@ -123,6 +123,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         image_prompt = None
         text_part = response
         
+        # Четкое и стабильное вырезание тега картинки
         start_idx = response.find("[SEND_PHOTO:")
         if start_idx != -1:
             text_part = response[:start_idx].strip()
@@ -132,7 +133,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             else:
                 image_prompt = response[start_idx + 12:].strip()
         else:
-            for marker in ["23yo gorgeous", "22yo beautiful", "24yo beautiful", "20yo beautiful", "25yo gothic"]:
+            for marker in ["gorgeous woman", "beautiful blonde", "beautiful brunette", "beautiful ginger", "gothic beautiful"]:
                 if marker in response:
                     m_idx = response.find(marker)
                     text_part = response[:m_idx].strip()
@@ -153,10 +154,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         if len(context.user_data["history"]) > 8:
             context.user_data["history"] = context.user_data["history"][-8:]
             
-        # 1. Сначала шлем текст
+        # 1. Сначала выводим русский текст девушки
         await update.message.reply_html(f"{char['emoji']} <b>{char['name']}:</b>\n\n{text_part}")
         
-        # 2. Скачиваем изображение с имитацией браузера
+        # 2. Скачиваем картинку в память Render через имитацию браузера и отправляем файлом
         if image_prompt:
             await update.message.chat.send_action("upload_photo")
             image_url = ai.generate_image_url(image_prompt)
@@ -177,11 +178,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                         parse_mode="HTML"
                     )
                 else:
-                    raise Exception(f"Failed to download image: {img_res.status_code}")
+                    raise Exception(f"Failed status code: {img_res.status_code}")
             
     except Exception as e:
-        logger.error(f"Error in handle_message: {e}")
-        await update.message.reply_text("✨ (Я попыталась отправить тебе фото, но сеть немного лагает... Напиши мне что-нибудь еще!)")
+        logger.error(f"Error: {e}")
+        # Даже если упадет генератор картинок, бот продолжит диалог и не зависнет!
+        await update.message.reply_html("✨ <i>(Я попыталась отправить тебе горячее селфи, но интернет в спальне немного барахлит... Давай продолжим ласки!)</i>")
 
 async def main_async() -> None:
     application = Application.builder().token(BOT_TOKEN).build()
