@@ -83,3 +83,29 @@ async def on_start():
         )
 
     print("🚀 V3 WEBHOOK BOT RUNNING")
+import os
+import logging
+from telegram import Bot
+from telegram.error import InvalidToken
+
+logger = logging.getLogger(__name__)
+
+def check_token_or_crash():
+    token = os.getenv("BOT_TOKEN")
+
+    if not token:
+        raise RuntimeError("❌ BOT_TOKEN не найден в ENV")
+
+    try:
+        bot = Bot(token=token)
+        me = bot.get_me()  # 🔥 реальный запрос к Telegram API
+
+        logger.info(f"✅ BOT TOKEN OK: @{me.username}")
+
+        return bot
+
+    except InvalidToken:
+        raise RuntimeError("❌ BOT_TOKEN НЕВАЛИДЕН (InvalidToken от Telegram)")
+
+    except Exception as e:
+        raise RuntimeError(f"❌ Ошибка проверки токена: {e}")
