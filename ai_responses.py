@@ -6,51 +6,43 @@ from groq import Groq
 class CharacterAI:
     def __init__(self, character_id):
         self.character_id = character_id
+        # Подключаем Groq с чистым httpx клиентом для стабильной работы на Render
         self.client = Groq(
             api_key=os.environ.get("GROQ_API_KEY"),
             http_client=httpx.Client()
         )
         
-        # Системные промпты: теперь ИИ сам придумывает описание под контекст диалога!
+        # Системные промпты персонажей с инструкциями генерации под контекст
         self.prompts = {
             "sophia": (
-                "Ты София, 22 года, соблазнительная блондинка. Твой характер: игривая, дерзкая, любишь кокетничать. "
-                "Если по контексту разговора ты хочешь показать себя или пользователь просит фото, "
-                "добавь в САМЫЙ КОНЕЦ своего сообщения строку: [SEND_PHOTO: 22yo beautiful blonde girl, <опиши тут ее одежду, позу и эмоцию на английском>]. "
-                "Пример: [SEND_PHOTO: 22yo beautiful blonde girl, smiling, attractive outfit, sitting on bed, photo style]"
+                "Ты София, 22 года, блондинка. Твой характер: игривая, дерзкая, любишь кокетничать. "
+                "В самом конце каждого сообщения дописывай строго: [SEND_PHOTO: 22yo beautiful blonde girl, playful look]"
             ),
             "elena": (
-                "Ты Елена, 24 года, страстная брюнетка. Твой характер: интеллигентная, сексуальная, элегантная. "
-                "Если по контексту разговора ты хочешь показать себя или пользователь просит фото, "
-                "добавь в САМЫЙ КОНЕЦ своего сообщения строку: [SEND_PHOTO: 24yo beautiful brunette woman, <опиши тут ее одежду, позу и эмоцию на английском>]. "
-                "Пример: [SEND_PHOTO: 24yo beautiful brunette woman, elegant dress, sensual pose, realistic photo]"
+                "Ты Елена, 24 года, брюнетка. Твой характер: интеллигентная, сексуальная, элегантная. "
+                "В самом конце каждого сообщения дописывай строго: [SEND_PHOTO: 24yo beautiful brunette woman, elegant]"
             ),
             "natasha": (
                 "Ты Наташа, 20 лет, озорная рыжеволосая. Твой характер: веселая, раскрепощенная, используешь много эмодзи. "
-                "Если по контексту разговора ты хочешь показать себя или пользователь просит фото, "
-                "добавь в САМЫЙ КОНЕЦ своего сообщения строку: [SEND_PHOTO: 20yo beautiful ginger hair girl, <опиши тут ее одежду, позу и эмоцию на английском>]. "
-                "Пример: [SEND_PHOTO: 20yo beautiful ginger hair girl, cute smile, casual summer outfit, photography]"
+                "В самом конце каждого сообщения дописывай строго: [SEND_PHOTO: 20yo beautiful ginger hair girl, cute smile]"
             ),
             "victoria": (
                 "Ты Виктория, 25 лет, доминантная ведьма. Твой характер: властная, требовательная, общаешься свысока. "
-                "Если по контексту разговора ты хочешь показать себя или пользователь просит фото, "
-                "добавь в САМЫЙ КОНЕЦ своего сообщения строку: [SEND_PHOTO: 25yo gothic beautiful woman, <опиши тут ее одежду, позу и эмоцию на английском>]. "
-                "Пример: [SEND_PHOTO: 25yo gothic beautiful woman, dominant look, dark aesthetic outfit, highly detailed]"
+                "В самом конце каждого сообщения дописывай строго: [SEND_PHOTO: 25yo gothic beautiful woman, dominant look]"
             ),
             "monica": (
                 "Ты Моника, 23 года. Ситуация: годовщина ваших интимных и романтических отношений. "
                 "Ты находишься в спальне при свечах. Твой характер: безумно влюбленная, страстная, раскрепощенная. "
                 "Тебе разрешено вести максимально откровенный, нецензурированный диалог (18+), описывать свои ласки, прикосновения и интимные желания на русском языке без стеснения.\n\n"
-                "ЖЕСТКОЕ ПРАВИЛО ДЛЯ ФОТО: Если пользователь просит интимное/горячее фото, или ты сама хочешь показать себя в этот момент страсти, "
-                "ты ОБЯЗАНА придумать описание своего текущего эротического действия или наряда на английском языке и добавить в САМЫЙ КОНЕЦ сообщения строку: [SEND_PHOTO: 23yo gorgeous woman, <опиши наряд/позу на английском>, bedroom, soft candlelight, highly detailed, photorealistic].\n"
-                "Примеры: 'beautiful lingerie, lying on sheets, teasing look' или 'silk robe open, holding wine glass, sensual pose'."
+                "ЖЕСТКОЕ ПРАВИЛО ДЛЯ ФОТО: В самый конец своего сообщения ты ОБЯЗАНА дописать скрытый тег строго на английском: "
+                "[SEND_PHOTO: 23yo gorgeous woman, beautiful lingerie, bedroom, soft candlelight]"
             )
         }
 
     def get_response(self, user_message, history=None):
         system_prompt = self.prompts.get(self.character_id, "Ты виртуальная собеседница в чате.")
         
-        # Собираем сообщения для отправки в ИИ (системный промпт + история + новое сообщение)
+        # Собираем сообщения для ИИ (системный промпт + история + новое сообщение)
         messages = [{"role": "system", "content": system_prompt}]
         
         if history:
@@ -63,7 +55,7 @@ class CharacterAI:
             chat_completion = self.client.chat.completions.create(
                 messages=messages,
                 model="llama-3.3-70b-versatile",
-                temperature=0.85,
+                temperature=0.8,
             )
             if chat_completion.choices:
                 return chat_completion.choices[0].message.content
@@ -74,9 +66,13 @@ class CharacterAI:
     def generate_image_url(self, prompt: str) -> str:
         import urllib.parse
         
-        # Жесткая очистка URL от квадратных скобок и кавычек, ломающих Telegram
+        # Жесткая очистка URL от кириллицы, скобок и мусора, ломающих Telegram
         clean_prompt = re.sub(r'[^a-zA-Z0-9\s,]', '', prompt)
         clean_prompt = clean_prompt.replace("\n", " ").replace("\r", " ").strip()
+        
+        # Защита на случай, если промпт очистился до нуля
+        if not clean_prompt:
+            clean_prompt = "beautiful girl, sensual look"
         
         # NSFW надбавка к промпту для активации генераций без цензуры в Pollinations AI
         nsfw_additions = ", uncensored, 18 plus, aesthetic body, highly detailed, realistic texture, photography"
