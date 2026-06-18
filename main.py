@@ -44,7 +44,7 @@ CHARACTERS = {
     "elena": {"name": "Елена", "age": 24, "description": "Страстная брюнетка", "personality": "Интеллигентная, сексуальная", "emoji": "💃"},
     "natasha": {"name": "Наташа", "age": 20, "description": "Озорная рыжеволосая", "personality": "Веселая, раскрепощенная", "emoji": "🔥"},
     "victoria": {"name": "Виктория", "age": 25, "description": "Доминантная ведьма", "personality": "Властная, требовательная", "emoji": "👿"},
-    "monica": {"name": "Моника (Сюрприз)", "age": 23, "description": "Сюрприз на годовщину ❤️", "personality": "Взволнованная, любящая, романтичная", "emoji": "🎁"},
+    "monica": {"name": "Моника (Сюрприз)", "age": 23, "description": "Сюрприз на годовщину ❤️", "personality": "Взволнованная, любящая, romantic", "emoji": "🎁"},
 }
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -114,12 +114,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         image_prompt = None
         text_part = response
         
-        # Поиск промпта в любом виде (со скобками и без)
+        # Умный разбор текста (ищет маркеры в любом виде)
         if "[SEND_PHOTO:" in response:
             text_part, photo_part = response.split("[SEND_PHOTO:", 1)
             image_prompt = photo_part.replace("]", "").strip()
         else:
-            # Если скобок нет, ищем ключевые маркеры английского текста
             for marker in ["23yo gorgeous", "22yo beautiful", "24yo beautiful", "20yo beautiful", "25yo gothic"]:
                 if marker in response:
                     text_part, remaining = response.split(marker, 1)
