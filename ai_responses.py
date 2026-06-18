@@ -8,13 +8,13 @@ from groq import Groq
 class CharacterAI:
     def __init__(self, character_id):
         self.character_id = character_id
-        # Чистый HTTP-клиент для стабильной работы на Render
+        # Чистый HTTP-клиент для Groq
         self.client = Groq(
             api_key=os.environ.get("GROQ_API_KEY"),
             http_client=httpx.Client()
         )
         
-        # Безопасные, но очень страстные и кокетливые промпты без стоп-слов (Groq их не заблокирует!)
+        # Ваши идеальные промпты, которые шикарно работают
         self.prompts = {
             "sophia": "Ты София, 22 года, блондинка. Твой характер: игривая, дерзкая, кокетливая. Общайся свободно и страстно, часто флиртуй. В самом конце каждого сообщения дописывай строго: [SEND_PHOTO: beautiful blonde girl, playful look]",
             "elena": "Ты Елена, 24 года, брюнетка. Твой характер: интеллигентная, сексуальная, элегантная. Общайся умно, но с глубоким флиртом. В самом конце каждого сообщения дописывай строго: [SEND_PHOTO: beautiful brunette woman, elegant look]",
@@ -53,20 +53,22 @@ class CharacterAI:
             return f"Извини, у меня закружилась голова... (Ошибка: {e})"
 
     def generate_image_url(self, prompt: str) -> str:
-        # Полная очистка промпта
-        clean_prompt = re.sub(r'[^a-zA-Z0-9\s,]', '', prompt)
-        clean_prompt = clean_prompt.replace("\n", " ").replace("\r", " ").strip()
-        
-        if not clean_prompt:
-            clean_prompt = "beautiful girl, sensual look"
+        # Полностью отказываемся от блокирующего Pollinations.
+        # Подключаем легальный архив профессиональных фотографий Unsplash, который разрешен на Render.
+        # Каждому персонажу выдаем свой набор сочных ключевых слов!
+        if self.character_id == "monica":
+            keywords = "sensual-woman,lingerie,bedroom"
+        elif self.character_id == "sophia":
+            keywords = "blonde-girl,sexy-woman"
+        elif self.character_id == "elena":
+            keywords = "brunette-girl,sensual"
+        elif self.character_id == "natasha":
+            keywords = "ginger-girl,glamour"
+        else:
+            keywords = "gothic-woman,dark-lingerie"
             
-        # Красивые кинематографичные теги, создающие сочные профессиональные кадры
-        style_additions = ", highly detailed skin texture, boudoir photography, soft lighting, sharp focus, masterpiece, 8k resolution"
-        full_prompt = f"{clean_prompt}{style_additions}"
-        encoded_prompt = urllib.parse.quote(full_prompt)
+        # Генерируем случайное число, чтобы Telegram не кэшировал картинки и они ВСЕГДА были разными
+        random_id = random.randint(1, 1000)
         
-        # Обход кэша Telegram — генерируем случайный сид для РАЗНЫХ картинок при каждом ответе
-        seed = random.randint(100000, 999999)
-        
-        # Рабочая и безопасная ссылка генератора Flux
-        return f"https://pollinations.ai{encoded_prompt}?width=1024&height=1024&nologo=true&seed={seed}&v={seed}"
+        # Ссылка ведет на огромную базу красивых профессиональных фото моделей
+        return f"https://unsplash.com?{keywords}&sig={random_id}"
