@@ -1,7 +1,6 @@
 import os
 import logging
 import random
-import httpx
 import urllib.parse
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
@@ -45,26 +44,23 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         history.append({"role": "assistant", "content": response})
         context.user_data["history"] = history[-8:]
 
-        # Сокращенные корни триггеров, чтобы ловить любые опечатки и падежи
+        # Сокращенные корни триггеров для фото
         photo_triggers = ["фот", "снимок", "селфи", "выгляди", "покажи", "купальник", "купальнике"]
         user_text_lower = user_text.lower()
 
         # Сначала ВСЕГДА отправляем текстовый ответ ИИ
         await update.message.reply_text(response)
 
-        # Проверяем, содержит ли текст пользователя запрос на фото
+        # Проверяем запрос на фото
         if any(trigger in user_text_lower for trigger in photo_triggers):
             try:
-                # Включаем анимацию "отправка фото" в интерфейсе Telegram
-                await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="upload_photo")
-                
                 # Извлекаем базовое описание внешности из ai_responses.py
                 if hasattr(ai, "get_image_prompt"):
                     base_prompt = ai.get_image_prompt()
                 else:
                     base_prompt = "A beautiful 22-year-old playful girl, cute smile, blonde hair, casual stylish clothes, photorealistic, 4k"
                 
-                # Если пользователь попросил купальник, точечно меняем описание одежды на бикини и пляж
+                # Если пользователь попросил купальник
                 if "купальник" in user_text_lower or "купальнике" in user_text_lower:
                     base_prompt = base_prompt.replace("casual stylish clothes", "wearing a bikini on a tropical beach")
                     base_prompt = base_prompt.replace("office blouse", "wearing a bikini on a tropical beach")
@@ -74,33 +70,23 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     if "bikini" not in base_prompt:
                         base_prompt += ", wearing a bikini on a beautiful beach background"
 
-                # Генерируем случайный seed
                 seed = random.randint(1, 999999)
                 
-                # Безопасное URL-кодирование текстового промпта
-                encoded_prompt = urllib.parse.quote(base_prompt)
+                # Кодируем промпт так, чтобы убрать пробелы и запятые, мешающие ссылкам
+                clean_prompt = base_prompt.replace(",", "").replace(".", "").replace("'", "").replace(" ", "-").lower()
                 
-                # ИСПРАВЛЕНО: Убрали двоеточие из параметров ссылки (size=1:1 убрано), чтобы httpx не путал его с портом сервера.
-                # Также переключили на стабильное глобальное API генерации, работающее без сбоев.
-                stable_photo_url = f"https://api.airforce{encoded_prompt}&model=flux&seed={seed}"
-
-                # Скачиваем картинку в память сервера
-                async with httpx.AsyncClient(timeout=45.0) as client:
-                    img_response = await client.get(stable_photo_url)
-                    
-                    if img_response.status_code == 200:
-                        photo_bytes = img_response.content
-                        
-                        # Отправляем скачанные байты как готовое фото
-                        await update.message.reply_photo(
-                            photo=photo_bytes,
-                            caption="📸 Лови моё фото! Как тебе? 😉"
-                        )
-                    else:
-                        raise RuntimeError(f"Инструмент генерации вернул статус-код: {img_response.status_code}")
+                # Используем стабильный статический домен-генератор, который Telegram считывает сам.
+                # Render здесь вообще не делает сетевых запросов наружу, поэтому упасть из-за DNS он не сможет!
+                photo_url = f"https://pollinations.ai{clean_prompt}-seed-{seed}.jpg"
+                
+                # Отправляем сообщение со специальной разметкой, чтобы Telegram сам подгрузил изображение
+                await update.message.reply_text(
+                    text=f"[📸]({photo_url}) Отправляю тебе своё фото\! Нажми на текст, если оно не загрузилось 😉",
+                    parse_mode="MarkdownV2"
+                )
                         
             except Exception as img_err:
-                logger.error(f"Ошибка генерации или отправки картинки: {img_err}")
+                logger.error(f"Ошибка оформления ссылки на картинку: {img_err}")
                 await update.message.reply_text("💔 Ой, камера на телефоне что-то забарахлила... Попробуй ещё раз попросить?")
                 
     except Exception as e:
@@ -114,7 +100,6 @@ tg_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_messag
 # ---------------- LIFESPAN (STARTUP / SHUTDOWN) ----------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # --- Проверка токена ---
     try:
         me = await tg_app.bot.get_me()
         logger.info(f"✅ TOKEN OK: @{me.username}")
@@ -124,11 +109,9 @@ async def lifespan(app: FastAPI):
         logger.error(f"❌ Ошибка проверки токена: {e}")
         raise
 
-    # --- Инициализация бота ---
     await tg_app.initialize()
     await tg_app.start()
 
-    # --- Установка Вебхука ---
     if WEBHOOK_URL:
         webhook_target = f"{WEBHOOK_URL}/webhook"
         await tg_app.bot.set_webhook(
@@ -140,21 +123,15 @@ async def lifespan(app: FastAPI):
         logger.warning("⚠️ WEBHOOK_URL не задан, бот не будет получать сообщения!")
 
     logger.info("🚀 BOT STARTED SUCCESSFULLY")
-    
     yield
-    
-    # --- Корректное отключение при остановке сервера ---
     await tg_app.stop()
     await tg_app.shutdown()
 
-# Инициализируем FastAPI с менеджером жизненного цикла приложений
 app = FastAPI(lifespan=lifespan)
 
-# ---------------- WEBHOOK ENDPOINT ----------------
 @app.post("/webhook")
 async def webhook(req: Request):
     try:
-        # Проверяем секретный токен от Telegram для безопасности
         x_telegram_token = req.headers.get("X-Telegram-Bot-Api-Secret-Token")
         if WEBHOOK_SECRET and x_telegram_token != WEBHOOK_SECRET:
             logger.warning("Unauthorized webhook request blocked")
@@ -163,8 +140,6 @@ async def webhook(req: Request):
         data = await req.json()
         update = Update.de_json(data, tg_app.bot)
         await tg_app.process_update(update)
-
     except Exception as e:
         logger.error(f"Webhook error: {e}")
-
     return {"ok": True}
