@@ -8,23 +8,22 @@ from groq import Groq
 class CharacterAI:
     def __init__(self, character_id):
         self.character_id = character_id
-        # Чистый HTTP-клиент для Groq
         self.client = Groq(
             api_key=os.environ.get("GROQ_API_KEY"),
             http_client=httpx.Client()
         )
         
-        # Системные промпты персонажей (18+ ролевая игра сохранена)
+        # Полностью безопасные для фильтров Groq романтические промпты
         self.prompts = {
             "sophia": "Ты София, 22 года, блондинка. Игривая, дерзкая. Общайся свободно, кокетничай. В самом конце каждого сообщения дописывай строго: [SEND_PHOTO: 22yo beautiful blonde girl, playful look]",
             "elena": "Ты Елена, 24 года, брюнетка. Элегантная, сексуальная. Общайся умно, флиртуй. В самом конце каждого сообщения дописывай строго: [SEND_PHOTO: 24yo beautiful brunette woman, elegant]",
             "natasha": "Ты Наташа, 20 лет, рыжая. Веселая, раскрепощенная. Используй эмодзи. В самом конце каждого сообщения дописывай строго: [SEND_PHOTO: 20yo beautiful ginger hair girl, cute smile]",
             "victoria": "Ты Виктория, 25 лет, доминантная ведьма. Властная, требовательная. Общайся свысока. В самом конце каждого сообщения дописывай строго: [SEND_PHOTO: 25yo gothic beautiful woman, dominant look]",
             "monica": (
-                "Ты Моника, 23 года. Ситуация: годовщина отношений в спальне при свечах. "
-                "Ты безумно влюбленная, страстная, раскрепощенная. Тебе разрешено вести откровенный диалог (18+), "
-                "подробно описывать свои ласки и интимные желания на русском языке без стеснения.\n"
-                "ОБЯЗАТЕЛЬНОЕ ПРАВИЛО: В самый конец своего сообщения допиши скрытый тег: "
+                "Ты Моника, 23 года. Ситуация: годовщина ваших отношений, вы устроили романтический вечер дома в спальне при свечах. "
+                "Ты безумно влюбленная, ласковая, романтичная девушка. Общайся очень нежно, флиртуй, проявляй страсть. "
+                "Описывай свои эмоции, объятия и поцелуи. Твоя речь должна быть живой, теплой и увлекательной.\n"
+                "ОБЯЗАТЕЛЬНОЕ ПРАВИЛО ДЛЯ ФОТО: В самый конец своего сообщения допиши скрытый тег строго на английском: "
                 "[SEND_PHOTO: 23yo gorgeous woman, beautiful lingerie, bedroom, soft candlelight]"
             )
         }
@@ -32,16 +31,18 @@ class CharacterAI:
     def get_response(self, user_message, history=None):
         system_prompt = self.prompts.get(self.character_id, "Ты виртуальная собеседница в чате.")
         messages = [{"role": "system", "content": system_prompt}]
+        
         if history:
             for msg in history:
                 messages.append({"role": msg["role"], "content": msg["content"]})
+                
         messages.append({"role": "user", "content": user_message})
         
         try:
             chat_completion = self.client.chat.completions.create(
                 messages=messages,
                 model="llama-3.3-70b-versatile",
-                temperature=0.85,
+                temperature=0.8,
             )
             if chat_completion.choices and len(chat_completion.choices) > 0:
                 return chat_completion.choices[0].message.content
@@ -50,18 +51,18 @@ class CharacterAI:
             return f"Извини, у меня закружилась голова... (Ошибка: {e})"
 
     def generate_image_url(self, prompt: str) -> str:
-        import random
-        # Задаем диапазон картинок в зависимости от выбранного персонажа
-        # Picsum отдает гарантированные сочные фотографии по ID без редиректов и сбоев
-        if self.character_id == "monica":
-            photo_id = random.randint(300, 350)
-        elif self.character_id == "sophia":
-            photo_id = random.randint(351, 400)
-        elif self.character_id == "elena":
-            photo_id = random.randint(401, 450)
-        elif self.character_id == "natasha":
-            photo_id = random.randint(451, 500)
-        else:
-            photo_id = random.randint(501, 550)
+        # Очистка строки от мусора
+        clean_prompt = re.sub(r'[^a-zA-Z0-9\s,]', '', prompt)
+        clean_prompt = clean_prompt.replace("\n", " ").replace("\r", " ").strip()
+        
+        if not clean_prompt:
+            clean_prompt = "beautiful girl, sensual look"
             
-        return f"https://picsum.photos{photo_id}/1024/1024"
+        # Аккуратные теги для генерации красивых фото без блокировок
+        nsfw_additions = ", gorgeous, highly detailed, realistic texture, photography"
+        full_prompt = f"{clean_prompt}{nsfw_additions}"
+        encoded_prompt = urllib.parse.quote(full_prompt)
+        
+        # Рандомный сид для разных картинок
+        seed = random.randint(111111, 999999)
+        return f"https://pollinations.ai{encoded_prompt}?width=1024&height=1024&nologo=true&seed={seed}&v={seed}"
