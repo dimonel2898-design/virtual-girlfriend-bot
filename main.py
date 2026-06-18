@@ -45,42 +45,55 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["history"] = history[-8:]
 
         # Список триггеров для отправки сгенерированных фотографий
-        photo_triggers = ["фото", "фотку", "фотографию", "покажи себя", "как выглядишь", "своё фото", "селфи", "снимок"]
+        photo_triggers = ["фото", "фотку", "фотографию", "покажи себя", "как выглядишь", "своё фото", "селфи", "снимок", "купальник", "купальнике"]
         user_text_lower = user_text.lower()
+
+        # Сначала ВСЕГДА отправляем текстовый ответ ИИ, чтобы пользователь видел реакцию в чате
+        await update.message.reply_text(response)
 
         # Проверяем, содержит ли текст пользователя запрос на фото
         if any(trigger in user_text_lower for trigger in photo_triggers):
-            # 1. Сначала отправляем кокетливый текстовый ответ ИИ
-            await update.message.reply_text(response)
-            
-            # 2. Включаем анимацию "отправка фото" в интерфейсе Telegram
-            await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="upload_photo")
-            
-            # 3. Извлекаем описание внешности (промпт) из ai_responses.py
-            # Если метода get_image_prompt нет, используем дефолтный базовый промпт
-            if hasattr(ai, "get_image_prompt"):
-                base_prompt = ai.get_image_prompt()
-            else:
-                base_prompt = "A beautiful 22-year-old playful girl, cute smile, blonde hair, photorealistic, 4k"
-            
-            # Генерируем уникальный seed, чтобы фотографии каждый раз отличались ракурсом и одеждой
-            seed = random.randint(1, 999999)
-            encoded_prompt = urllib.parse.quote(base_prompt)
-            
-            # Формируем прямую ссылку на бесплатный генератор изображений Pollinations (модель Flux)
-            photo_url = f"https://pollinations.ai{encoded_prompt}?width=1024&height=1024&seed={seed}&model=flux"
-            
-            # 4. Отправляем пользователю реальное изображение
-            await update.message.reply_photo(
-                photo=photo_url,
-                caption="📸 Лови моё фото! Как тебе? 😉"
-            )
-        else:
-            # Если пользователь фото не просил — просто присылаем обычный текст
-            await update.message.reply_text(response)
+            try:
+                # Включаем анимацию "отправка фото" в интерфейсе Telegram
+                await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="upload_photo")
+                
+                # Извлекаем базовое описание внешности из ai_responses.py
+                if hasattr(ai, "get_image_prompt"):
+                    base_prompt = ai.get_image_prompt()
+                else:
+                    base_prompt = "A beautiful 22-year-old playful girl, cute smile, blonde hair, casual stylish clothes, photorealistic, 4k"
+                
+                # Если пользователь попросил купальник, точечно меняем описание одежды на бикини и пляж
+                if "купальник" in user_text_lower or "купальнике" in user_text_lower:
+                    base_prompt = base_prompt.replace("casual stylish clothes", "wearing a bikini on a tropical beach")
+                    base_prompt = base_prompt.replace("office blouse", "wearing a bikini on a tropical beach")
+                    base_prompt = base_prompt.replace("crop top, leather jacket", "wearing a bikini on a tropical beach")
+                    base_prompt = base_prompt.replace("luxury business suit, rich interior background", "wearing a bikini on a tropical beach")
+                    base_prompt = base_prompt.replace("summer dress, holding a flower, sunny park background", "wearing a bikini on a tropical beach")
+                    if "bikini" not in base_prompt:
+                        base_prompt += ", wearing a bikini on a beautiful beach background"
 
+                # Генерируем случайный seed, чтобы новые фотографии всегда отличались ракурсом
+                seed = random.randint(1, 999999)
+                
+                # Кодируем промпт для URL-адреса, заменяя пробелы на безопасный символ '+'
+                # Это решает проблему падения отправки медиа на серверах Telegram API
+                encoded_prompt = urllib.parse.quote_plus(base_prompt)
+                
+                # Формируем прямую ссылку на бесплатный генератор изображений Pollinations (модель Flux)
+                photo_url = f"https://pollinations.ai{encoded_prompt}?width=1024&height=1024&seed={seed}&model=flux"
+                
+                # Отправляем пользователю настоящее изображение
+                await update.message.reply_photo(
+                    photo=photo_url,
+                    caption="📸 Лови моё фото! Как тебе? 😉"
+                )
+            except Exception as img_err:
+                logger.error(f"Ошибка генерации или отправки картинки: {img_err}")
+                await update.message.reply_text("💔 Ой, камера на телефоне что-то забарахлила... Попробуй ещё раз попросить?")
+                
     except Exception as e:
-        logger.error(f"Ошибка в handle_message: {e}")
+        logger.error(f"Общая ошибка в handle_message: {e}")
         await update.message.reply_text("💔 Ошибка, попробуй ещё раз")
 
 # ---------------- REGISTER ----------------
