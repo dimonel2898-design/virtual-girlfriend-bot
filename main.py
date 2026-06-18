@@ -2,8 +2,6 @@ import asyncio
 import logging
 import os
 import uvicorn
-import httpx
-from io import BytesIO
 from fastapi import FastAPI
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -40,11 +38,11 @@ async def run_web_server():
     await server.serve()
 
 CHARACTERS = {
-    "sophia": {"name": "София", "age": 22, "description": "Соблазнительная блондинка", "personality": "Игривая, дерзкая", "emoji": "👰", "base_prompt": "22yo beautiful blonde girl, playful look"},
-    "elena": {"name": "Елена", "age": 24, "description": "Страстная брюнетка", "personality": "Интеллигентная, сексуальная", "emoji": "💃", "base_prompt": "24yo beautiful brunette woman, elegant"},
-    "natasha": {"name": "Наташа", "age": 20, "description": "Озорная рыжеволосая", "personality": "Веселая, раскрепощенная", "emoji": "🔥", "base_prompt": "20yo beautiful ginger hair girl, cute smile"},
-    "victoria": {"name": "Виктория", "age": 25, "description": "Доминантная ведьма", "personality": "Властная, требовательная", "emoji": "👿", "base_prompt": "25yo gothic beautiful woman, dominant look"},
-    "monica": {"name": "Моника (Сюрприз)", "age": 23, "description": "Сюрприз на годовщину ❤️", "personality": "Взволнованная, любящая", "emoji": "🎁", "base_prompt": "23yo gorgeous woman, beautiful lingerie, bedroom"},
+    "sophia": {"name": "София", "age": 22, "description": "Соблазнительная блондинка", "personality": "Игривая, дерзкая", "emoji": "👰", "base_prompt": "beautiful blonde girl"},
+    "elena": {"name": "Елена", "age": 24, "description": "Страстная брюнетка", "personality": "Интеллигентная, сексуальная", "emoji": "💃", "base_prompt": "beautiful brunette woman"},
+    "natasha": {"name": "Наташа", "age": 20, "description": "Озорная рыжеволосая", "personality": "Веселая, раскрепощенная", "emoji": "🔥", "base_prompt": "beautiful ginger girl"},
+    "victoria": {"name": "Виктория", "age": 25, "description": "Доминантная ведьма", "personality": "Властная, требовательная", "emoji": "👿", "base_prompt": "gothic beautiful woman"},
+    "monica": {"name": "Моника (Сюрприз)", "age": 23, "description": "Сюрприз на годовщину ❤️", "personality": "Взволнованная, любящая", "emoji": "🎁", "base_prompt": "gorgeous girl"},
 }
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -123,7 +121,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         image_prompt = None
         text_part = response
         
-        # Четкое и стабильное вырезание тега картинки
         start_idx = response.find("[SEND_PHOTO:")
         if start_idx != -1:
             text_part = response[:start_idx].strip()
@@ -133,7 +130,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             else:
                 image_prompt = response[start_idx + 12:].strip()
         else:
-            for marker in ["gorgeous woman", "beautiful blonde", "beautiful brunette", "beautiful ginger", "gothic beautiful"]:
+            for marker in ["beautiful blonde", "beautiful brunette", "beautiful ginger", "gothic beautiful", "gorgeous woman"]:
                 if marker in response:
                     m_idx = response.find(marker)
                     text_part = response[:m_idx].strip()
@@ -154,36 +151,23 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         if len(context.user_data["history"]) > 8:
             context.user_data["history"] = context.user_data["history"][-8:]
             
-        # 1. Сначала выводим русский текст девушки
+        # 1. Отправляем текст
         await update.message.reply_html(f"{char['emoji']} <b>{char['name']}:</b>\n\n{text_part}")
         
-        # 2. Скачиваем картинку в память Render через имитацию браузера и отправляем файлом
+        # 2. Мгновенно отправляем фото ПО ССЫЛКЕ без скачивания на сервер
         if image_prompt:
             await update.message.chat.send_action("upload_photo")
             image_url = ai.generate_image_url(image_prompt)
             
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-            }
-            
-            async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
-                img_res = await client.get(image_url, headers=headers)
-                if img_res.status_code == 200:
-                    photo_file = BytesIO(img_res.content)
-                    photo_file.name = "photo.jpg"
-                    
-                    await update.message.reply_photo(
-                        photo=photo_file,
-                        caption=f"📸 Фото от {char['name']}\n\n⚙️ <i>Чтобы сменить персонажа, введи /start</i>",
-                        parse_mode="HTML"
-                    )
-                else:
-                    raise Exception(f"Failed status code: {img_res.status_code}")
+            await update.message.reply_photo(
+                photo=image_url,
+                caption=f"📸 Фото от {char['name']}\n\n⚙️ <i>Чтобы сменить персонажа, введи /start</i>",
+                parse_mode="HTML"
+            )
             
     except Exception as e:
-        logger.error(f"Error: {e}")
-        # Даже если упадет генератор картинок, бот продолжит диалог и не зависнет!
-        await update.message.reply_html("✨ <i>(Я попыталась отправить тебе горячее селфи, но интернет в спальне немного барахлит... Давай продолжим ласки!)</i>")
+        logger.error(f"Error in handle_message: {e}")
+        await update.message.reply_text("❌ У меня закружилась голова, повтори фразу еще раз!")
 
 async def main_async() -> None:
     application = Application.builder().token(BOT_TOKEN).build()
