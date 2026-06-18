@@ -1,9 +1,12 @@
 """
-Virtual Girlfriend Bot - Main Application with Groq AI
-Updated: 2026-06-17
+Virtual Girlfriend Bot - Main Application with Groq AI + Web Server for Render
+Updated: 2026-06-18
 """
+import asyncio
 import logging
 import os
+import uvicorn
+from fastapi import FastAPI
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -19,6 +22,7 @@ from ai_responses import CharacterAI
 
 load_dotenv()
 
+# Настройка логирования
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
@@ -26,7 +30,24 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 CHOOSING_CHARACTER, CHATTING = range(2)
-BOT_TOKEN = os.getenv("BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
+
+# Пытаемся взять токен из переменных окружения Render, если его там нет — берем заглушку
+BOT_TOKEN = os.getenv("BOT_TOKEN", "8329335388:AAE9l42XZUecGMnbLEezc3NAfW6CBXvNFJU")
+
+# ----------------- НАСТРОЙКА ВЕБ-СЕРВЕРА ДЛЯ RENDER -----------------
+app = FastAPI()
+
+@app.get("/")
+async def root():
+    return {"status": "alive", "message": "Virtual Girlfriend Bot is running!"}
+
+async def run_web_server():
+    # Render передает порт в переменную окружения PORT
+    port = int(os.environ.get("PORT", 8000))
+    config = uvicorn.Config(app, host="0.0.0.0", port=port, log_level="info")
+    server = uvicorn.Server(config)
+    await server.serve()
+# --------------------------------------------------------------------
 
 CHARACTERS = {
     "sophia": {
@@ -154,7 +175,23 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     
     return CHATTING
 
-def main() -> None:
+async def run_bot(application: Application):
+    # Асинхронная инициализация и запуск опроса Telegram
+    await application.initialize()
+    await application.start()
+    await application.updater.start_polling()
+    print("🤖 Бот успешно запущен в режиме polling!")
+    
+    # Держим бота запущенным, пока работает программа
+    try:
+        while True:
+            await asyncio.sleep(3600)
+    except asyncio.CancelledError:
+        await application.updater.stop()
+        await application.stop()
+        await application.shutdown()
+
+async def main_async() -> None:
     application = Application.builder().token(BOT_TOKEN).build()
     
     conv_handler = ConversationHandler(
@@ -176,8 +213,14 @@ def main() -> None:
     
     application.add_handler(conv_handler)
     
-    print("🤖 Бот запущен с Groq AI!")
-    application.run_polling()
+    # Запускаем одновременно веб-сервер и самого бота
+    await asyncio.gather(
+        run_web_server(),
+        run_bot(application)
+    )
 
 if __name__ == '__main__':
-    main()
+    try:
+        asyncio.run(main_async())
+    except (KeyboardInterrupt, SystemExit):
+        logger.info("Бот остановлен.")
