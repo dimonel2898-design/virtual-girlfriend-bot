@@ -121,7 +121,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         image_prompt = None
         text_part = response
         
-        # Индексный поиск тега для стопроцентной надежности
+        # Надежный индексный срез строки
         start_idx = response.find("[SEND_PHOTO:")
         if start_idx != -1:
             text_part = response[:start_idx].strip()
@@ -131,7 +131,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             else:
                 image_prompt = response[start_idx + 12:].strip()
         else:
-            # Если ИИ прислал промпт без скобок
             for marker in ["23yo gorgeous", "22yo beautiful", "24yo beautiful", "20yo beautiful", "25yo gothic"]:
                 if marker in response:
                     m_idx = response.find(marker)
@@ -143,23 +142,23 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         if not text_part:
             text_part = response
             
-        # Автоматический запасной вариант: если ИИ увлекся и забыл промпт, но тема интимная
+        # Запасной триггер, если ИИ пропустил тег, но тема интимная
         trigger_words = ["фото", "покажи", "раздеться", "белье", "тело", "одежд", "смотри", "взгляни", "грудь", "сексуаль", "интим"]
         is_photo_requested = any(w in user_message.lower() for w in trigger_words) or any(w in response.lower() for w in trigger_words)
         
         if not image_prompt and is_photo_requested:
             image_prompt = char["base_prompt"]
             
-        # Запись в историю памяти бота
+        # Запись реплик в память бота
         context.user_data["history"].append({"role": "user", "content": user_message})
         context.user_data["history"].append({"role": "assistant", "content": text_part})
         if len(context.user_data["history"]) > 8:
             context.user_data["history"] = context.user_data["history"][-8:]
             
-        # Сначала всегда отправляем текстовое сообщение
+        # 1. Отправляем текст
         await update.message.reply_html(f"{char['emoji']} <b>{char['name']}:</b>\n\n{text_part}")
         
-        # Если промпт найден или сработал запасной триггер — шлем фото
+        # 2. Шлем фото
         if image_prompt:
             await update.message.chat.send_action("upload_photo")
             image_url = ai.generate_image_url(image_prompt)
@@ -171,7 +170,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             
     except Exception as e:
         logger.error(f"Error in handle_message: {e}")
-        # Защитный механизм от падений бота в Telegram
         await update.message.reply_text("✨ (Я попыталась отправить тебе фото, но сеть немного лагает... Напиши мне что-нибудь еще!)")
     
     return CHATTING
@@ -195,7 +193,7 @@ async def main_async() -> None:
     )
     application.add_handler(conv_handler)
     
-    # Пошаговый контролируемый запуск
+    # Пошаговый старт
     await application.initialize()
     await application.start()
     await application.updater.start_polling()
