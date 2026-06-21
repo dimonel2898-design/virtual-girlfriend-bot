@@ -72,23 +72,20 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 seed = random.randint(1, 999999)
                 
-                # Кодируем промпт так, чтобы убрать спецсимволы, ломающие URL
-                clean_prompt = base_prompt.replace(",", "").replace(".", "").replace("'", "").replace(" ", "-").lower()
+                # Безопасно кодируем весь текст промпта для передачи в GET-запросе URL
+                encoded_prompt = urllib.parse.quote(base_prompt)
                 
-                # Ссылка на генератор, которую Telegram подгрузит сам прямо в чате
-                photo_url = f"https://pollinations.ai{clean_prompt}-seed-{seed}.jpg"
+                # Правильный и актуальный URL эндпоинта Pollinations AI
+                photo_url = f"https://pollinations.ai{encoded_prompt}?seed={seed}&width=1024&height=1024"
                 
-                # Собираем скрытую HTML ссылку внутри пустого символа в начале текста.
-                # Telegram считает разметку и выведет картинку красивым превью под текстом сообщения.
-                html_text = f'<a href="{photo_url}">\u200b</a>📷 Отправляю тебе своё фото! Лови 😉'
-                
-                await update.message.reply_text(
-                    text=html_text,
-                    parse_mode="HTML"
+                # Отправляем реальную фотографию в Telegram с подписью под ней
+                await update.message.reply_photo(
+                    photo=photo_url,
+                    caption="📷 Отправляю тебе своё фото! Лови 😉"
                 )
                         
             except Exception as img_err:
-                logger.error(f"Ошибка оформления ссылки на картинку: {img_err}")
+                logger.error(f"Ошибка генерации или отправки картинки: {img_err}")
                 await update.message.reply_text("💔 Ой, камера на телефоне что-то забарахлила... Попробуй ещё раз попросить?")
                 
     except Exception as e:
