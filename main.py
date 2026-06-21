@@ -2,17 +2,16 @@ import os
 import logging
 import random
 import urllib.parse
-
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request
 
+from fastapi import FastAPI, Request
 from telegram import Update
 from telegram.ext import (
 Application,
 CommandHandler,
 MessageHandler,
 ContextTypes,
-filters
+filters,
 )
 from telegram.error import InvalidToken
 
@@ -26,58 +25,56 @@ WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "secret")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
 if not BOT_TOKEN:
-raise RuntimeError("BOT_TOKEN отсутствует")
+raise RuntimeError("BOT_TOKEN не найден")
 
-tg_app = (
-Application.builder()
-.token(BOT_TOKEN)
-.build()
-)
+tg_app = Application.builder().token(BOT_TOKEN).build()
 
-async def start(
-update: Update,
-context: ContextTypes.DEFAULT_TYPE
-):
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 await update.message.reply_text(
 "🚀 Bot запущен"
 )
 
 async def handle_message(
 update: Update,
-context: ContextTypes.DEFAULT_TYPE
+context: ContextTypes.DEFAULT_TYPE,
 ):
-
-```
 try:
 
+```
     char_id = context.user_data.get(
         "char",
-        "sophia"
+        "sophia",
     )
 
     ai = CharacterAI(char_id)
 
-    text = update.message.text
+    user_text = (
+        update.message.text or ""
+    )
 
-    history = (
-        context.user_data
-        .get("history", [])
+    history = context.user_data.get(
+        "history",
+        [],
     )
 
     response = ai.get_response(
-        text,
-        history
+        user_text,
+        history,
     )
 
-    history.append({
-        "role": "user",
-        "content": text
-    })
+    history.append(
+        {
+            "role": "user",
+            "content": user_text,
+        }
+    )
 
-    history.append({
-        "role": "assistant",
-        "content": response
-    })
+    history.append(
+        {
+            "role": "assistant",
+            "content": response,
+        }
+    )
 
     context.user_data["history"] = history[-8:]
 
@@ -85,58 +82,59 @@ try:
         response
     )
 
-    triggers = [
+    photo_triggers = [
         "фот",
         "селфи",
         "снимок",
         "покажи",
         "выгляди",
-        "купальник"
+        "купальник",
     ]
 
-    low = text.lower()
+    text_lower = user_text.lower()
 
-    if any(t in low for t in triggers):
+    if any(
+        x in text_lower
+        for x in photo_triggers
+    ):
 
         prompt = ai.get_image_prompt()
 
-        if "купальник" in low:
-
+        if "купальник" in text_lower:
             prompt += (
-                ", wearing a bikini "
+                ", wearing bikini "
                 "on tropical beach"
             )
 
         seed = random.randint(
             1,
-            999999
+            999999,
         )
 
-        clean = (
+        clean_prompt = (
             prompt
             .replace("\n", " ")
+            .replace("\r", " ")
             .strip()
         )
 
         encoded = urllib.parse.quote(
-            clean
+            clean_prompt
         )
 
         photo_url = (
             "https://image.pollinations.ai/prompt/"
-            f"{encoded}"
-            f"?seed={seed}"
-            "&width=1024"
-            "&height=1024"
+            + encoded
+            + f"?seed={seed}&width=1024&height=1024"
         )
 
         logger.info(
-            f"Generated: {photo_url}"
+            f"Generated photo URL: {photo_url}"
         )
 
         await update.message.reply_photo(
             photo=photo_url,
-            caption="📷 Лови фото 😉"
+            caption="📷 Лови фото 😉",
         )
 
 except Exception:
@@ -153,7 +151,7 @@ except Exception:
 tg_app.add_handler(
 CommandHandler(
 "start",
-start
+start,
 )
 )
 
@@ -161,7 +159,7 @@ tg_app.add_handler(
 MessageHandler(
 filters.TEXT
 & ~filters.COMMAND,
-handle_message
+handle_message,
 )
 )
 
@@ -191,7 +189,11 @@ if WEBHOOK_URL:
 
     await tg_app.bot.set_webhook(
         url=f"{WEBHOOK_URL}/webhook",
-        secret_token=WEBHOOK_SECRET
+        secret_token=WEBHOOK_SECRET,
+    )
+
+    logger.info(
+        "Webhook установлен"
     )
 
 yield
@@ -230,6 +232,7 @@ try:
         WEBHOOK_SECRET
         and token != WEBHOOK_SECRET
     ):
+
         return {
             "ok": False
         }
@@ -238,7 +241,7 @@ try:
 
     update = Update.de_json(
         data,
-        tg_app.bot
+        tg_app.bot,
     )
 
     await tg_app.process_update(
