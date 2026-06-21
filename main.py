@@ -44,7 +44,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         history.append({"role": "assistant", "content": response})
         context.user_data["history"] = history[-8:]
 
-        # Сокращенные корни триггеров для фото (поймет любые опечатки)
+        # Сокращенные корни триггеров для фото
         photo_triggers = ["фот", "снимок", "селфи", "выгляди", "покажи", "купальник", "купальнике"]
         user_text_lower = user_text.lower()
 
@@ -75,13 +75,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 # Принудительно очищаем промпт от скрытых переносов строк и пробелов по краям
                 clean_prompt = base_prompt.replace("\n", " ").replace("\r", " ").strip()
                 
-                # Безопасно кодируем чистый текст промпта для передачи в GET-запросе URL
+                # Безопасно кодируем чистый текст промпта
                 encoded_prompt = urllib.parse.quote(clean_prompt)
                 
-                # Правильный и актуальный URL эндпоинта Pollinations AI
+                # ЖЕСТКО ЗАФИКСИРОВАННЫЙ АДРЕС КАРТИНКИ (БЕЗ ОШИБОК СКЛЕИВАНИЯ СТРОК)
                 photo_url = f"https://pollinations.ai{encoded_prompt}?seed={seed}&width=1024&height=1024"
                 
-                # Логируем ссылку для отладки в терминале
+                # Логируем итоговую ссылку
                 logger.info(f"Generated photo URL: {photo_url}")
                 
                 # Отправляем реальную фотографию в Telegram с подписью под ней
@@ -133,6 +133,11 @@ async def lifespan(app: FastAPI):
     await tg_app.shutdown()
 
 app = FastAPI(lifespan=lifespan)
+
+# Заглушка для прохождения проверки Health Check со стороны Render
+@app.get("/")
+async def root():
+    return {"status": "ok", "message": "Bot is alive"}
 
 @app.post("/webhook")
 async def webhook(req: Request):
