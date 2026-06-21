@@ -72,11 +72,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 seed = random.randint(1, 999999)
                 
-                # Безопасно кодируем весь текст промпта для передачи в GET-запросе URL
-                encoded_prompt = urllib.parse.quote(base_prompt)
+                # Принудительно очищаем промпт от скрытых переносов строк и пробелов по краям
+                clean_prompt = base_prompt.replace("\n", " ").replace("\r", " ").strip()
+                
+                # Безопасно кодируем чистый текст промпта для передачи в GET-запросе URL
+                encoded_prompt = urllib.parse.quote(clean_prompt)
                 
                 # Правильный и актуальный URL эндпоинта Pollinations AI
                 photo_url = f"https://pollinations.ai{encoded_prompt}?seed={seed}&width=1024&height=1024"
+                
+                # Логируем ссылку для отладки в терминале
+                logger.info(f"Generated photo URL: {photo_url}")
                 
                 # Отправляем реальную фотографию в Telegram с подписью под ней
                 await update.message.reply_photo(
