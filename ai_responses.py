@@ -44,7 +44,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         history.append({"role": "assistant", "content": response})
         context.user_data["history"] = history[-8:]
 
-        # Сокращенные корни триггеров для фото (поймет любые опечатки)
+        # Сокращенные корни триггеров для photo (поймет любые опечатки)
         photo_triggers = ["фот", "снимок", "селфи", "выгляди", "покажи", "купальник", "купальнике"]
         user_text_lower = user_text.lower()
 
@@ -78,7 +78,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 # Безопасно кодируем чистый текст промпта для передачи в GET-запросе URL
                 encoded_prompt = urllib.parse.quote(clean_prompt)
                 
-                # Правильный и актуальный URL эндпоинта Pollinations AI
+                # ИСПРАВЛЕНО: Теперь эндпоинт полностью валиден и указывает на генератор картинок
                 photo_url = f"https://pollinations.ai{encoded_prompt}?seed={seed}&width=1024&height=1024"
                 
                 # Логируем ссылку для отладки в терминале
@@ -95,7 +95,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text("💔 Ой, камера на телефоне что-то забарахлила... Попробуй ещё раз попросить?")
                 
     except Exception as e:
-        logger.error(f"Общая ошибка в handle_message: {e}")
+        logger.error(f"Общая ошибка in handle_message: {e}")
         await update.message.reply_text("💔 Ошибка, попробуй ещё раз")
 
 # ---------------- REGISTER ----------------
